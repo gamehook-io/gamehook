@@ -11,6 +11,7 @@ namespace GameHook.Domain.GameHookProperties
         public int? Position { get; init; }
         public string? Reference { get; init; }
         public string? Description { get; init; }
+        public string? Preprocessor { get; init; }
     }
 
     public abstract class GameHookProperty<T> : IGameHookProperty

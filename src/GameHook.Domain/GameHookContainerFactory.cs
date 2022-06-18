@@ -2,7 +2,6 @@ using GameHook.Domain.GameHookProperties;
 using GameHook.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 using YamlDotNet.Serialization;
 
 namespace GameHook.Domain
@@ -242,9 +241,12 @@ namespace GameHook.Domain
                 {
                     var list = new List<GlossaryItem>();
 
-                    foreach (var y in x.Value)
+                    if (x.Value != null)
                     {
-                        list.Add(new GlossaryItem(y.Key, y.Value));
+                        foreach (var y in x.Value)
+                        {
+                            list.Add(new GlossaryItem(y.Key, y.Value));
+                        }
                     }
 
                     glossary.Add(x.Key, list);
