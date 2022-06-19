@@ -21,7 +21,7 @@ namespace GameHook.Domain.GameHookProperties
                 return null;
             }
 
-            if (PlatformOptions.EndianType == EndianTypeEnum.LittleEndian)
+            if (PlatformOptions.EndianType == EndianTypes.LittleEndian)
             {
                 Array.Reverse(bytes);
             }

@@ -40,5 +40,10 @@ namespace GameHook.Domain
         {
             return value >= min && value <= max;
         }
+
+        public static byte[] Get(this byte[] data, uint skip, int take)
+        {
+            return data.Skip(skip).Take(take).ToArray();
+        }
     }
 }

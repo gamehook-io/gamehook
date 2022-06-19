@@ -6,6 +6,7 @@
 		<ProductVersion>0.0.0.0+dev</ProductVersion>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<TargetFramework>net6.0</TargetFramework>
+		<EnablePreviewFeatures>true</EnablePreviewFeatures>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>

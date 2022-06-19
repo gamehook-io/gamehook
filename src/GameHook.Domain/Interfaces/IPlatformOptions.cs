@@ -4,7 +4,7 @@
 
     public interface IPlatformOptions
     {
-        public EndianTypeEnum EndianType { get; }
+        public EndianTypes EndianType { get; }
 
         public IEnumerable<PlatformRange> Ranges { get; }
     }

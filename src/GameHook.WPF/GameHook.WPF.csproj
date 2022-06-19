@@ -6,6 +6,7 @@
 		<ProductVersion>0.0.0.0+dev</ProductVersion>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<TargetFramework>net6.0-windows</TargetFramework>
+		<EnablePreviewFeatures>true</EnablePreviewFeatures>
 		<OutputType>WinExe</OutputType>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>

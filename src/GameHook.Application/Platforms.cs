@@ -1,10 +1,11 @@
-﻿using GameHook.Domain.Interfaces;
+﻿using GameHook.Domain;
+using GameHook.Domain.Interfaces;
 
-namespace GameHook.Domain
+namespace GameHook.Application
 {
     public class NES_PlatformOptions : IPlatformOptions
     {
-        public EndianTypeEnum EndianType { get; } = EndianTypeEnum.BigEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.BigEndian;
 
         public IEnumerable<PlatformRange> Ranges { get; } = new List<PlatformRange>()
         {
@@ -14,7 +15,7 @@ namespace GameHook.Domain
 
     public class SNES_PlatformOptions : IPlatformOptions
     {
-        public EndianTypeEnum EndianType { get; } = EndianTypeEnum.LittleEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.LittleEndian;
 
         public IEnumerable<PlatformRange> Ranges { get; } = new List<PlatformRange>()
         {
@@ -24,7 +25,7 @@ namespace GameHook.Domain
 
     public class GB_PlatformOptions : IPlatformOptions
     {
-        public EndianTypeEnum EndianType { get; } = EndianTypeEnum.BigEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.BigEndian;
 
         public IEnumerable<PlatformRange> Ranges { get; } = new List<PlatformRange>()
         {
@@ -41,7 +42,7 @@ namespace GameHook.Domain
 
     public class GBA_PlatformOptions : IPlatformOptions
     {
-        public EndianTypeEnum EndianType { get; } = EndianTypeEnum.LittleEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.LittleEndian;
 
         public IEnumerable<PlatformRange> Ranges { get; } = new List<PlatformRange>()
         {

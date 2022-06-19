@@ -1,6 +1,6 @@
 namespace GameHook.Domain
 {
-    public enum EndianTypeEnum
+    public enum EndianTypes
     {
         BigEndian,
         LittleEndian

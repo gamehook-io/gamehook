@@ -18,7 +18,7 @@ namespace GameHook.Domain.GameHookProperties
 
             var bytes = BitConverter.GetBytes(value ?? 0);
 
-            if (PlatformOptions.EndianType == EndianTypeEnum.BigEndian)
+            if (PlatformOptions.EndianType == EndianTypes.BigEndian)
                 Array.Reverse(bytes);
 
             return bytes;
@@ -31,7 +31,7 @@ namespace GameHook.Domain.GameHookProperties
                 return null;
             }
 
-            if (PlatformOptions.EndianType == EndianTypeEnum.BigEndian)
+            if (PlatformOptions.EndianType == EndianTypes.BigEndian)
                 Array.Reverse(bytes);
 
             byte[] value = new byte[8];

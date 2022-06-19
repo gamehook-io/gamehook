@@ -53,7 +53,7 @@
             var decryptedByteArray = new byte[0];
 
             // Return the byte array decrypted.
-            return decryptedByteArray;
+            return entireBlock;
         }
 
         public static byte[] data_block_a245dcac(int structureIndex, int offset, Dictionary<int, byte[]> decryptedDataBlock)

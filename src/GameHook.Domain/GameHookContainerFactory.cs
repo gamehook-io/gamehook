@@ -6,31 +6,6 @@ using YamlDotNet.Serialization;
 
 namespace GameHook.Domain
 {
-    record YamlRoot
-    {
-        public YamlMeta meta { get; init; }
-        public IDictionary<object, object> properties { get; init; }
-        public IDictionary<string, IDictionary<object, dynamic>> macros { get; init; }
-        public IDictionary<string, IDictionary<uint, dynamic>> glossary { get; init; }
-    }
-
-    record YamlMeta
-    {
-        public int schemaVersion { get; init; }
-        public Guid id { get; init; }
-        public string gameName { get; init; }
-        public string gamePlatform { get; init; }
-    }
-
-    record MacroEntry
-    {
-        public string type { get; init; }
-        public int? address { get; init; }
-        public string macro { get; init; }
-        public string? reference { get; init; }
-        public int? length { get; init; }
-    }
-
     public class GameHookContainerFactory : IGameHookContainerFactory
     {
         private ILogger<GameHookContainerFactory> Logger { get; }
@@ -97,50 +72,14 @@ namespace GameHook.Domain
                 Description = description
             };
 
-            if (type == "binaryCodedDecimal")
-            {
-                container.AddHookProperty(key, new BinaryCodedDecimalProperty(container, key, fields));
-            }
-            else if (type == "bool")
-            {
-                container.AddHookProperty(key, new BooleanProperty(container, key, fields));
-            }
-            else if (type == "bit")
-            {
-                container.AddHookProperty(key, new BitProperty(container, key, fields));
-            }
-            else if (type == "bitArray")
-            {
-                container.AddHookProperty(key, new BitFieldProperty(container, key, fields));
-            }
-            else if (type == "int")
-            {
-                container.AddHookProperty(key, new IntegerProperty(container, key, fields));
-            }
-            else if (type == "uint")
-            {
-                container.AddHookProperty(key, new UnsignedIntegerProperty(container, key, fields));
-            }
-            else if (type == "reference")
-            {
-                container.AddHookProperty(key, new ReferenceProperty(container, key, fields));
-            }
-            else if (type == "referenceArray")
-            {
-                container.AddHookProperty(key, new ReferenceArrayProperty(container, key, fields));
-            }
-            else if (type == "string")
-            {
-                container.AddHookProperty(key, new StringProperty(container, key, fields));
-            }
-            else if (type == "macro")
+            if (type == "macro")
             {
                 var nextLevel = container.Macros[macro ?? throw new Exception($"Property {key} is missing a required field: macro.")];
                 TransverseProperties(container, nextLevel, key, new MacroPointer((MemoryAddress)address));
             }
             else
             {
-                throw new Exception($"Unable to determine type '{type}' when parsing properties of {source}.");
+                // container.AddHookProperty()
             }
         }
 
@@ -207,27 +146,7 @@ namespace GameHook.Domain
 
         public async Task LoadGameMapper(string id)
         {
-            Driver.StopWatchingAndReset();
 
-            LoadedMapper = null;
-            LoadedMapperId = null;
-
-            if (string.IsNullOrEmpty(id))
-            {
-                throw new ArgumentException("ID was NULL or empty.", nameof(id));
-            }
-
-            var mapperFile = MapperFilesystemProvider.MapperFiles.SingleOrDefault(x => x.Id == id) ??
-                throw new Exception($"Unable to determine a mapper with the ID of {id}.");
-
-            if (File.Exists(mapperFile.AbsolutePath) == false)
-            {
-                throw new FileNotFoundException($"File was not found in the {mapperFile.Type} mapper folder.", mapperFile.DisplayName);
-            }
-
-            var contents = await File.ReadAllTextAsync(mapperFile.AbsolutePath);
-            var deserializer = new DeserializerBuilder().Build();
-            var data = deserializer.Deserialize<YamlRoot>(contents);
 
             if (data.meta.id == Guid.Empty) throw new ValidationException("Mapper ID is not defined in meta.");
 
@@ -236,21 +155,6 @@ namespace GameHook.Domain
                 var meta = new GameHookMapperMeta(SchemaVersion: data.meta.schemaVersion, Id: data.meta.id, GameName: data.meta.gameName, GamePlatform: data.meta.gamePlatform);
                 var properties = new Dictionary<string, IGameHookProperty>();
 
-                var glossary = new Dictionary<string, IEnumerable<GlossaryItem>>();
-                foreach (var x in data.glossary)
-                {
-                    var list = new List<GlossaryItem>();
-
-                    if (x.Value != null)
-                    {
-                        foreach (var y in x.Value)
-                        {
-                            list.Add(new GlossaryItem(y.Key, y.Value));
-                        }
-                    }
-
-                    glossary.Add(x.Key, list);
-                }
 
                 var mapper = new GameHookContainer(Logger, ClientNotifiers, Driver, meta, data.macros, glossary);
 

@@ -7,32 +7,6 @@ using System.Text;
 
 namespace GameHook.Domain.Drivers
 {
-    class MemoryAddressRange
-    {
-        public MemoryAddressRange(MemoryAddress address, byte[] bytes)
-        {
-            Address = address;
-            Bytes = bytes;
-        }
-
-        public MemoryAddress Address { get; private set; }
-        public byte[] Bytes { get; private set; }
-    }
-
-    class WatchMemoryAddress
-    {
-        public WatchMemoryAddress(MemoryAddress memoryAddress, int length)
-        {
-            Address = memoryAddress;
-            Length = length;
-            OldBytes = null;
-        }
-
-        public MemoryAddress Address { get; }
-        public int Length { get; }
-        public byte[]? OldBytes { get; set; }
-    }
-
     record ReceivedPacket
     {
         public ReceivedPacket(string command, MemoryAddress memoryAddress, byte[] value)
@@ -47,24 +21,12 @@ namespace GameHook.Domain.Drivers
         public byte[] Value { get; set; }
     }
 
-    internal class AsyncState
-    {
-        internal AsyncState(int bufferSize)
-        {
-            Buffer = new byte[bufferSize];
-        }
-
-        internal byte[] Buffer;
-    }
-
     public class RetroArchUdpPollingDriver : IGameHookDriver
     {
         private ILogger<RetroArchUdpPollingDriver> Logger { get; }
         private IContainerForDriver? Container { get; set; }
         private DriverOptions DriverOptions { get; }
         private UdpClient UdpClient { get; set; }
-        private List<WatchMemoryAddress> AddressesToWatch { get; } = new List<WatchMemoryAddress>();
-        private Dictionary<MemoryAddress, int> AddressNumberOfTimeouts { get; } = new Dictionary<MemoryAddress, int>();
         private Dictionary<string, ReceivedPacket> Responses { get; set; } = new Dictionary<string, ReceivedPacket>();
         private CancellationTokenSource? WatchingAddressesCancellationTokenSource { get; set; }
         private const int DELAY_BETWEEN_RECEIVE_MS = 2;
