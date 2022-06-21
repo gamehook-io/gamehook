@@ -1,5 +1,4 @@
 ﻿using GameHook.Domain.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace GameHook.Application
@@ -29,19 +28,23 @@ namespace GameHook.Application
     public class GameHookInstance
     {
         private ILogger<GameHookInstance> Logger { get; }
-        public IGameHookDriver Driver { get; }
+        private IMapperFilesystemProvider MapperFilesystemProvider { get; }
+        public IGameHookDriver? Driver { get; private set; }
         public Mapper? Mapper { get; private set; }
         public IPlatformOptions? PlatformOptions { get; private set; }
 
-        public GameHookInstance(IServiceProvider serviceProvider, string mapperFilePath)
+        public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider)
         {
-            Logger = serviceProvider.GetRequiredService<ILogger<GameHookInstance>>();
-            Driver = serviceProvider.GetRequiredService<IGameHookDriver>();
+            Logger = logger;
+            MapperFilesystemProvider = provider;
+        }
 
-            var mapperFilename = Path.GetFileName(mapperFilePath);
+        public void Load(IGameHookDriver driver, string mapperId)
+        {
+            Logger.LogInformation("Initializing GameHook instance...");
 
-            Logger.LogInformation($"Initializing instance for mapper '{mapperFilename}'...");
-            Mapper = MapperFactory.ReadMapper(mapperFilePath);
+            Driver = driver;
+            Mapper = MapperFactory.ReadMapper(this, MapperFilesystemProvider, mapperId);
 
             PlatformOptions = Mapper.Metadata.GamePlatform switch
             {

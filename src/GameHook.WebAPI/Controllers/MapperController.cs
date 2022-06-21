@@ -106,6 +106,8 @@ namespace GameHook.WebAPI.Controllers
                 await GameMapperFactory.LoadGameMapper(model.Id);
             }
 
+            var count = GameMapperFactory.LoadedMapper.Properties;
+
             return Ok();
         }
 

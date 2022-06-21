@@ -85,33 +85,14 @@ namespace GameHook.Domain.Drivers
             });
         }
 
-        public void AddAddressToWatch(MemoryAddress memoryAddress, int length)
-        {
-            if (AddressesToWatch.Any(x => x.Address.Equals(memoryAddress) && x.Length == length) == false)
-            {
-                AddressesToWatch.Add(new WatchMemoryAddress(memoryAddress, length));
-            }
-        }
-
-        private MemoryAddressRange? GetRangeForAddress(MemoryAddress address, IEnumerable<MemoryAddressRange> ranges)
-        {
-            foreach (var range in ranges)
-            {
-                if (address >= range.Address && address <= range.Address + range.Bytes.Length)
-                {
-                    return range;
-                }
-            }
-
-            return null;
-        }
-
         public bool StartWatching(IContainerForDriver handler)
         {
+            return true;
+            /*
             WatchingAddressesCancellationTokenSource = new CancellationTokenSource();
             Container = handler;
 
-            var addressesToWatch = AddressesToWatch.ToList();
+            // var addressesToWatch = new List();
             if (addressesToWatch.Any() == false) { return true; }
 
             // Calculate which platform ranges are required by the mapper.
@@ -212,11 +193,11 @@ namespace GameHook.Domain.Drivers
 
             if (ranSuccessfullyOnce) return true;
             else return false;
+            */
         }
 
         public void StopWatchingAndReset()
         {
-            AddressesToWatch.Clear();
             WatchingAddressesCancellationTokenSource?.Cancel();
 
             Container = null;

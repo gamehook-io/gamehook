@@ -26,8 +26,6 @@ namespace GameHook.Domain.Interfaces
 
         Task WriteBytes(MemoryAddress memoryAddress, byte[] values);
 
-        void AddAddressToWatch(MemoryAddress memoryAddress, int length);
-
         bool StartWatching(IContainerForDriver handler);
 
         void StopWatchingAndReset();

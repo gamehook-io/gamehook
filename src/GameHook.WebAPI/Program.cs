@@ -1,3 +1,4 @@
+using GameHook.Application;
 using GameHook.Domain;
 using GameHook.Domain.Drivers;
 using GameHook.Domain.Infrastructure;
@@ -146,7 +147,7 @@ public class Program
             builder.Services.AddSingleton<IMapperFilesystemProvider, MapperFilesystemProvider>();
             builder.Services.AddSingleton<IMapperUpdateManager, MapperUpdateManager>();
             builder.Services.AddSingleton<IGameHookDriver, RetroArchUdpPollingDriver>();
-            builder.Services.AddSingleton<IGameHookContainerFactory, GameHookContainerFactory>();
+            builder.Services.AddSingleton<GameHookInstance>();
             builder.Services.AddSingleton<IClientNotifier, WebSocketClientNotifier>();
 
             if (configuration.OutputPropertyValuesToFilesystem)

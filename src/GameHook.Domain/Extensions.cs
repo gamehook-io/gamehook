@@ -43,7 +43,7 @@ namespace GameHook.Domain
 
         public static byte[] Get(this byte[] data, uint skip, int take)
         {
-            return data.Skip(skip).Take(take).ToArray();
+            return data.Skip((int)skip).Take(take).ToArray();
         }
     }
 }

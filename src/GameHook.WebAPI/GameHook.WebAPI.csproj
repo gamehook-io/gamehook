@@ -49,6 +49,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\GameHook.Application\GameHook.Application.csproj" />
 		<ProjectReference Include="..\GameHook.Domain\GameHook.Domain.csproj" />
 	</ItemGroup>
 
