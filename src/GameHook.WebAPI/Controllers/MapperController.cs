@@ -1,6 +1,5 @@
+using GameHook.Application;
 using GameHook.Domain;
-using GameHook.Domain.GameHookProperties;
-using GameHook.Domain.Interfaces;
 using Mapster;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -11,19 +10,19 @@ namespace GameHook.WebAPI.Controllers
 {
     static class MapperHelper
     {
-        public static PropertyModel MapToPropertyModel(this IGameHookProperty x, string path) =>
+        public static PropertyModel MapToPropertyModel(this GameHookPropertyNEW x, string path) =>
             new PropertyModel
             {
                 Path = path,
                 Type = x.Type,
                 Address = x.Address,
                 Size = x.Size,
-                Position = x.Fields.Position,
-                Reference = x.Fields.Reference,
+                Position = x.MapperVariables.Position,
+                Reference = x.MapperVariables.Reference,
                 Value = x.Value,
-                Frozen = x.Frozen,
-                Bytes = x.Bytes.ToIntegerArray(),
-                Description = x.Fields.Description
+                Frozen = x.IsFrozen,
+                Bytes = x.Bytes?.ToIntegerArray(),
+                Description = x.MapperVariables.Description
             };
     }
 
@@ -43,7 +42,7 @@ namespace GameHook.WebAPI.Controllers
 
         public string Type { get; init; } = string.Empty;
 
-        public uint Address { get; init; }
+        public uint? Address { get; init; }
 
         public int Size { get; init; }
 
@@ -54,7 +53,7 @@ namespace GameHook.WebAPI.Controllers
         [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
         public object? Value { get; init; }
 
-        public IEnumerable<int> Bytes { get; init; } = Enumerable.Empty<int>();
+        public IEnumerable<int>? Bytes { get; init; } = Enumerable.Empty<int>();
 
         public bool? Frozen { get; init; }
 

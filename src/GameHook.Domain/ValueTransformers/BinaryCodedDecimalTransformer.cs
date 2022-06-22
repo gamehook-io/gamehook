@@ -1,8 +1,6 @@
-﻿using GameHook.Domain.Interfaces;
-
-namespace GameHook.Domain.ValueTransformers
+﻿namespace GameHook.Domain.ValueTransformers
 {
-    internal class BinaryCodedDecimalTransformer : ITransformer<int>
+    public static class BinaryCodedDecimalTransformer
     {
         public static byte[] FromValue(int value)
         {
