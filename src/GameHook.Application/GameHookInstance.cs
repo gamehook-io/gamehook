@@ -1,4 +1,5 @@
-﻿using GameHook.Domain.Interfaces;
+﻿using GameHook.Domain;
+using GameHook.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace GameHook.Application
@@ -47,7 +48,7 @@ namespace GameHook.Application
             MapperFilesystemProvider = provider;
         }
 
-        public void Load(IGameHookDriver driver, string mapperId)
+        public async Task Load(IGameHookDriver driver, string mapperId)
         {
             Logger.LogInformation("Initializing GameHook instance...");
 
@@ -63,11 +64,24 @@ namespace GameHook.Application
                 _ => throw new Exception($"Unknown game platform {Mapper.Metadata.GamePlatform}.")
             };
 
+            await Read();
+
             Initalized = true;
         }
 
         public async Task Read()
         {
+            if (Driver == null)             throw new Exception("Driver is null.");
+            if (PlatformOptions == null)    throw new Exception("Platform options are null.");
+            if (Mapper == null) throw new Exception("Mapper is null.");
+
+            var driverResult = await Driver.ReadBytes(PlatformOptions.Ranges);
+
+            foreach (var property in Mapper.Properties)
+            {
+                property.Process(driverResult.Bytes.First().Value);
+            }
+
             await Task.CompletedTask;
         }
     }

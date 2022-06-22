@@ -1,17 +1,8 @@
-using GameHook.Domain.DTOs;
-
 namespace GameHook.Domain.Interfaces
 {
-    public record UpdatedMemoryAddressEvent
+    public record ReadBytesResult
     {
-        public UpdatedMemoryAddressEvent(MemoryAddress memoryAddress, byte[] value)
-        {
-            MemoryAddress = memoryAddress;
-            Value = value;
-        }
-
-        public MemoryAddress MemoryAddress { get; }
-        public byte[] Value { get; }
+        public Dictionary<string, byte[]> Bytes { get; init; } = new Dictionary<string, byte[]>();
     }
 
     /// <summary>
@@ -24,10 +15,8 @@ namespace GameHook.Domain.Interfaces
     {
         string ProperName { get; }
 
-        Task WriteBytes(MemoryAddress memoryAddress, byte[] values);
+        Task<ReadBytesResult> ReadBytes(IEnumerable<MemoryAddressBlock> blocks);
 
-        bool StartWatching(IContainerForDriver handler);
-
-        void StopWatchingAndReset();
+        Task WriteBytes(MemoryAddress startingMemoryAddress, byte[] values);
     }
 }

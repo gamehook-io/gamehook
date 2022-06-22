@@ -1,6 +1,6 @@
-using GameHook.Domain.DTOs;
 using GameHook.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -24,13 +24,10 @@ namespace GameHook.Domain.Drivers
     public class RetroArchUdpPollingDriver : IGameHookDriver
     {
         private ILogger<RetroArchUdpPollingDriver> Logger { get; }
-        private IContainerForDriver? Container { get; set; }
         private DriverOptions DriverOptions { get; }
         private UdpClient UdpClient { get; set; }
         private Dictionary<string, ReceivedPacket> Responses { get; set; } = new Dictionary<string, ReceivedPacket>();
-        private CancellationTokenSource? WatchingAddressesCancellationTokenSource { get; set; }
         private const int DELAY_BETWEEN_RECEIVE_MS = 2;
-        private const int DELAY_BETWEEN_WATCHES_MS = 1;
         private const int READ_PACKET_TIMEOUT_MS = 75;
         public string ProperName { get; } = "RetroArch";
 
@@ -79,129 +76,10 @@ namespace GameHook.Domain.Drivers
                     }
                     catch (Exception ex)
                     {
-                        Container?.OnDriverError(new ProblemDetailsForClientDTO() { Title = "UDP_CONNECTION_ERROR", Detail = "An error has occurred when receiving packets." }, ex);
+                        throw new DriverDisconnectedException(null, ex);
                     }
                 }
             });
-        }
-
-        public bool StartWatching(IContainerForDriver handler)
-        {
-            return true;
-            /*
-            WatchingAddressesCancellationTokenSource = new CancellationTokenSource();
-            Container = handler;
-
-            // var addressesToWatch = new List();
-            if (addressesToWatch.Any() == false) { return true; }
-
-            // Calculate which platform ranges are required by the mapper.
-            var requestRanges = Container.PlatformOptions.Ranges
-                                    .Where(x => addressesToWatch.Any(y => y.Address.Between(x.StartingAddress, x.EndingAddress)))
-                                    .ToList();
-
-            Logger.LogDebug($"Requested {requestRanges.Count}/{Container.PlatformOptions.Ranges.Count()} ranges of memory.");
-            Logger.LogDebug($"Requested ranges: {string.Join(", ", requestRanges.Select(x => x.Name))}");
-
-            var ranSuccessfullyOnce = false;
-
-            Task.Run(async () =>
-            {
-                var token = WatchingAddressesCancellationTokenSource.Token;
-
-                while (true)
-                {
-                    Responses.Clear();
-
-                    if (addressesToWatch.Any())
-                    {
-                        try
-                        {
-                            token.ThrowIfCancellationRequested();
-
-                            var ranges = new List<MemoryAddressRange>();
-                            foreach (var range in requestRanges)
-                            {
-                                token.ThrowIfCancellationRequested();
-
-                                // Read the entire address range into memory.
-                                var length = range.EndingAddress - range.StartingAddress;
-                                var packet = await ReadMemoryAddress(range.StartingAddress, length);
-
-                                ranges.Add(new MemoryAddressRange(packet.MemoryAddress, packet.Value));
-                                AddressNumberOfTimeouts[packet.MemoryAddress] = 0;
-                            }
-
-                            await Parallel.ForEachAsync(addressesToWatch, async (watch, cancellationToken) =>
-                            {
-                                token.ThrowIfCancellationRequested();
-
-                                var range = GetRangeForAddress(watch.Address, ranges);
-                                if (range == null)
-                                {
-                                    // We cannot read from this section of memory, since we did not pull it.
-
-                                    if (ranSuccessfullyOnce == false)
-                                    {
-                                        Logger.LogWarning($"Cannot access memory address {watch.Address.ToHexdecimalString()} because it outside of the range platform addresses provided. Skipping translation for this property.");
-                                    }
-
-                                    return;
-                                }
-
-                                var offsetaddress = watch.Address - range.Address;
-                                var totalOffset = offsetaddress + watch.Length;
-                                var result = range.Bytes.Skip((int)offsetaddress).Take(watch.Length).ToArray();
-
-                                if (watch.OldBytes == null || result.SequenceEqual(watch.OldBytes) == false)
-                                {
-                                    if (Container != null)
-                                    {
-                                        await Container.OnDriverMemoryChanged(watch.Address, watch.Length, result);
-                                    }
-
-                                    watch.OldBytes = result;
-                                }
-                            });
-
-                            token.ThrowIfCancellationRequested();
-
-                            ranSuccessfullyOnce = true;
-                        }
-                        catch (DriverTimeoutException ex)
-                        {
-                            token.ThrowIfCancellationRequested();
-
-                            AddressNumberOfTimeouts[ex.MemoryAddress] += 1;
-                            if (AddressNumberOfTimeouts[ex.MemoryAddress] >= DriverOptions.DriverTimeoutCounter)
-                            {
-                                await Container.OnDriverMemoryTimeout(ex);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            await Container.OnDriverError(new ProblemDetailsForClientDTO() { Title = "DRIVER_ERROR", Detail = "An unknown driver error was encountered when reading RAM." }, ex);
-                        }
-                    }
-
-                    await Task.Delay(DELAY_BETWEEN_WATCHES_MS);
-                }
-            }, WatchingAddressesCancellationTokenSource.Token);
-
-            SpinWait.SpinUntil(() => ranSuccessfullyOnce, TimeSpan.FromSeconds(2));
-
-            if (ranSuccessfullyOnce) return true;
-            else return false;
-            */
-        }
-
-        public void StopWatchingAndReset()
-        {
-            WatchingAddressesCancellationTokenSource?.Cancel();
-
-            Container = null;
-            Responses.Clear();
         }
 
         private string ToRetroArchHexdecimalString(uint value)
@@ -299,6 +177,25 @@ namespace GameHook.Domain.Drivers
             {
                 Logger.LogError(ex, $"ReceivePacket error on incoming packet: {receiveString}");
             }
+        }
+
+        public async Task<ReadBytesResult> ReadBytes(IEnumerable<MemoryAddressBlock> blocks)
+        {
+            var result = new ReadBytesResult();
+
+            Stopwatch sw = new Stopwatch();
+
+            sw.Start();
+            foreach (var block in blocks)
+            {
+                var blockResult = await ReadMemoryAddress(block.StartingAddress, block.EndingAddress - block.StartingAddress);
+                result.Bytes[block.Name] = blockResult.Value;
+            }
+            sw.Stop();
+
+            Logger.LogInformation($"Time for reading took: {sw.ElapsedMilliseconds}ms");
+
+            return result;
         }
     }
 }
