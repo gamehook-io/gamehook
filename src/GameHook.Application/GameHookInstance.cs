@@ -5,21 +5,28 @@ namespace GameHook.Application
 {
     public class Mapper
     {
-        public Mapper(MapperMetadata metadata, IEnumerable<GameHookPropertyNEW> properties, IDictionary<string, IEnumerable<GlossaryItem>> glossary)
+        public Mapper(string filesystemId, MapperMetadata metadata, IEnumerable<GameHookProperty> properties, IDictionary<string, IEnumerable<GlossaryItem>> glossary)
         {
+            FilesystemId = filesystemId;
             Metadata = metadata;
             Properties = properties;
             Glossary = glossary;
         }
 
+        public string FilesystemId { get; init; }
         public MapperMetadata Metadata { get; init; }
-        public IEnumerable<GameHookPropertyNEW> Properties { get; init; }
+        public IEnumerable<GameHookProperty> Properties { get; init; }
         public IDictionary<string, IEnumerable<GlossaryItem>> Glossary { get; init; }
+
+        public GameHookProperty GetPropertyByPath(string path)
+        {
+            return Properties.Single(x => x.Path == path);
+        }
     }
 
     public class MapperMetadata
     {
-        public int SchameVersion { get; init; } = 0;
+        public int SchemaVersion { get; init; } = 0;
         public Guid Id { get; init; } = Guid.Empty;
         public string GameName { get; init; } = string.Empty;
         public string GamePlatform { get; init; } = string.Empty;
@@ -32,6 +39,7 @@ namespace GameHook.Application
         public IGameHookDriver? Driver { get; private set; }
         public Mapper? Mapper { get; private set; }
         public IPlatformOptions? PlatformOptions { get; private set; }
+        public bool Initalized { get; private set; } = false;
 
         public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider)
         {
@@ -54,6 +62,8 @@ namespace GameHook.Application
                 "GBA" => new GBA_PlatformOptions(),
                 _ => throw new Exception($"Unknown game platform {Mapper.Metadata.GamePlatform}.")
             };
+
+            Initalized = true;
         }
 
         public async Task Read()

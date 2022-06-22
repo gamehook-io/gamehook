@@ -1,5 +1,6 @@
 using GameHook.Application;
 using GameHook.Domain;
+using GameHook.Domain.Interfaces;
 using Mapster;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -10,7 +11,7 @@ namespace GameHook.WebAPI.Controllers
 {
     static class MapperHelper
     {
-        public static PropertyModel MapToPropertyModel(this GameHookPropertyNEW x, string path) =>
+        public static PropertyModel MapToPropertyModel(this GameHookProperty x, string path) =>
             new PropertyModel
             {
                 Path = path,
@@ -26,8 +27,21 @@ namespace GameHook.WebAPI.Controllers
             };
     }
 
-    public record MapperModel(MapperMetaModel Meta, IEnumerable<PropertyModel> Properties, Dictionary<string, IEnumerable<GlossaryItemModel>> Glossary);
-    public record MapperMetaModel(int SchemaVersion, Guid Id, string GameName, string GamePlatform);
+    public record MapperModel
+    {
+        public MapperMetaModel Meta { get; init; } = null!;
+        public IEnumerable<PropertyModel> Properties { get; init; } = null!;
+        public Dictionary<string, IEnumerable<GlossaryItemModel>> Glossary { get; init; } = null!;
+    }
+
+    public record MapperMetaModel
+    {
+        public int SchemaVersion { get; init; }
+        public Guid Id { get; init; }
+        public string GameName { get; init; } = string.Empty;
+        public string GamePlatform { get; init; } = string.Empty;
+    }
+
     public class GlossaryItemModel
     {
         public uint Key { get; init; }
@@ -73,39 +87,39 @@ namespace GameHook.WebAPI.Controllers
     [Route("mapper")]
     public class MapperController : ControllerBase
     {
-        public IGameHookContainerFactory GameMapperFactory { get; }
-        public IGameHookContainer? GameHookMapper => GameMapperFactory.LoadedMapper;
+        public GameHookInstance Instance { get; }
+        public IGameHookDriver Driver { get; }
 
-        public MapperController(IGameHookContainerFactory gameMapperFactory)
+        public MapperController(GameHookInstance gameHookInstance, IGameHookDriver driver)
         {
-            GameMapperFactory = gameMapperFactory;
+            Instance = gameHookInstance;
+            Driver = driver;
         }
 
         [HttpGet]
         [SwaggerOperation("Returns the mapper that was loaded, with all properties (populated with data).")]
         public ActionResult<MapperModel> GetMapper()
         {
-            if (GameMapperFactory.LoadedMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
-            var model = GameMapperFactory.LoadedMapper.Adapt<MapperModel>();
+            var model = Instance.Mapper.Adapt<MapperModel>();
             return Ok(model);
         }
 
         [HttpPut]
         [SwaggerOperation("Changes the active mapper.")]
-        public async Task<ActionResult> ChangeMapper(MapperReplaceModel model)
+        public ActionResult ChangeMapper(MapperReplaceModel model)
         {
             if (string.IsNullOrEmpty(model.Id))
             {
-                await GameMapperFactory.ReloadGameMapper();
+                // Reload the existing mapper from the filesystem.
+                Instance.Load(Driver, Instance.Mapper?.FilesystemId ?? string.Empty);
             }
             else
             {
-                await GameMapperFactory.LoadGameMapper(model.Id);
+                Instance.Load(Driver, model.Id);
             }
-
-            var count = GameMapperFactory.LoadedMapper.Properties;
 
             return Ok();
         }
@@ -114,11 +128,17 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Returns the meta section of the mapper file.")]
         public ActionResult<MapperMetaModel> GetMeta()
         {
-            if (GameHookMapper == null || GameHookMapper.Meta == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
-            var meta = GameHookMapper.Meta;
-            var model = new MapperMetaModel(meta.SchemaVersion, meta.Id, meta.GameName, meta.GamePlatform);
+            var meta = Instance.Mapper.Metadata;
+            var model = new MapperMetaModel
+            {
+                SchemaVersion = meta.SchemaVersion,
+                Id = meta.Id,
+                GameName = meta.GameName,
+                GamePlatform = meta.GamePlatform
+            };
 
             return Ok(model);
         }
@@ -128,18 +148,19 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Returns a specific property's value by it's path.")]
         public ActionResult GetValueAsync(string path)
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
             path = path.StripEndingRoute().FromRouteToPath();
 
-            var prop = GameHookMapper.GetPropertyByPath(path);
+            var prop = Instance.Mapper.GetPropertyByPath(path);
+
             if (prop == null)
                 return NotFound();
 
             if (prop.Value is object)
             {
-                return BadRequest($"{prop.Identifier} is an object and cannot be converted to text.");
+                return BadRequest($"{prop.Path} is an object and cannot be converted to text.");
             }
 
             return Ok(prop.Value?.ToString() ?? string.Empty);
@@ -149,22 +170,23 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Returns all properties loaded from the mapper.")]
         public ActionResult<IEnumerable<PropertyModel>> GetProperties()
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
-            return Ok(GameHookMapper.Properties.Select(x => x.Value.MapToPropertyModel(x.Key)));
+            return Ok(Instance.Mapper.Properties.Select(x => x.MapToPropertyModel(x.Path)));
         }
 
         [HttpGet("properties/{**path}/")]
         [SwaggerOperation("Returns a specific property by it's path.")]
         public ActionResult<PropertyModel?> GetProperty(string path)
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
             path = path.StripEndingRoute().FromRouteToPath();
 
-            var prop = GameHookMapper.GetPropertyByPath(path);
+            var prop = Instance.Mapper.GetPropertyByPath(path);
+
             if (prop == null)
                 return NotFound();
 
@@ -175,11 +197,12 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Updates a property's value.")]
         public async Task<ActionResult> UpdatePropertyAsync(string path, UpdatePropertyModel model)
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
             path = path.StripEndingRoute().FromRouteToPath();
-            var prop = GameHookMapper.GetPropertyByPath(path);
+
+            var prop = Instance.Mapper.GetPropertyByPath(path);
 
             if (prop == null)
                 return NotFound();
@@ -189,43 +212,7 @@ namespace GameHook.WebAPI.Controllers
 
             if (model.Value != null)
             {
-                if (prop.Type == "bcd")
-                {
-                    var prop2 = (BinaryCodedDecimalProperty)prop;
-                    await prop2.WriteValue(model.Value.Value.GetInt32(), model.Freeze);
-                }
-                else if (prop.Type == "bit")
-                {
-                    throw new NotImplementedException();
-                }
-                else if (prop.Type == "boolean")
-                {
-                    var prop2 = (BooleanProperty)prop;
-                    await prop2.WriteValue(model.Value.Value.GetBoolean(), model.Freeze);
-                }
-                else if (prop.Type == "int")
-                {
-                    var prop2 = (IntegerProperty)prop;
-                    await prop2.WriteValue(model.Value.Value.GetInt32(), model.Freeze);
-                }
-                else if (prop.Type == "reference")
-                {
-                    throw new NotImplementedException();
-                }
-                else if (prop.Type == "string")
-                {
-                    var prop2 = (StringProperty)prop;
-                    await prop2.WriteValue(model.Value.Value.GetString(), model.Freeze);
-                }
-                else if (prop.Type == "uint")
-                {
-                    var prop2 = (UnsignedIntegerProperty)prop;
-                    await prop2.WriteValue(model.Value.Value.GetUInt32(), model.Freeze);
-                }
-                else
-                {
-                    return BadRequest("Invalid value.");
-                }
+                await prop.WriteValue(model.Value, model.Freeze);
             }
             else if (model.Bytes != null)
             {
@@ -233,13 +220,7 @@ namespace GameHook.WebAPI.Controllers
             }
             else if (model.Freeze == false)
             {
-                prop.Unfreeze();
-            }
-
-            foreach (var notifier in GameHookMapper.ClientNotifiers)
-            {
-                if (model.Freeze == true) { await notifier.SendPropertyFrozen(path); }
-                else { await notifier.SendPropertyUnfrozen(path); }
+                prop.UnfreezeProperty();
             }
 
             return Ok();
@@ -249,25 +230,25 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Returns the glossary section of the mapper file.")]
         public ActionResult<Dictionary<string, Dictionary<byte, dynamic>>> GetGlossary()
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
-            return Ok(GameHookMapper.Glossary);
+            return Ok(Instance.Mapper.Glossary);
         }
 
         [HttpGet("glossary/{key}")]
         [SwaggerOperation("Returns a specific glossary by it's key.")]
         public ActionResult<Dictionary<byte, dynamic>> GetGlossaryPage(string key)
         {
-            if (GameHookMapper == null)
+            if (Instance.Initalized == false || Instance.Mapper == null)
                 return ApiHelper.MapperNotLoaded();
 
             key = key.StripEndingRoute();
 
-            if (GameHookMapper.Glossary.ContainsKey(key) == false)
+            if (Instance.Mapper.Glossary.ContainsKey(key) == false)
                 return NotFound();
             else
-                return Ok(GameHookMapper.Glossary[key]);
+                return Ok(Instance.Mapper.Glossary[key]);
         }
     }
 }

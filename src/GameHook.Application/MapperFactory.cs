@@ -37,16 +37,16 @@ namespace GameHook.Application
 
     public static class MapperFactory
     {
-        public static Mapper ReadMapper(GameHookInstance instance, IMapperFilesystemProvider provider, string mapperId)
+        public static Mapper ReadMapper(GameHookInstance instance, IMapperFilesystemProvider provider, string filesystemId)
         {
-            if (string.IsNullOrEmpty(mapperId))
+            if (string.IsNullOrEmpty(filesystemId))
             {
-                throw new ArgumentException("ID was NULL or empty.", nameof(mapperId));
+                throw new ArgumentException("ID was NULL or empty.", nameof(filesystemId));
             }
 
             // Get the file path from the filesystem provider.
-            var mapperFile = provider.MapperFiles.SingleOrDefault(x => x.Id == mapperId) ??
-                throw new Exception($"Unable to determine a mapper with the ID of {mapperId}.");
+            var mapperFile = provider.MapperFiles.SingleOrDefault(x => x.Id == filesystemId) ??
+                throw new Exception($"Unable to determine a mapper with the ID of {filesystemId}.");
 
             if (File.Exists(mapperFile.AbsolutePath) == false)
             {
@@ -65,14 +65,14 @@ namespace GameHook.Application
             // Load metadata.
             var metadata = new MapperMetadata()
             {
-                SchameVersion = data.meta.schemaVersion,
+                SchemaVersion = data.meta.schemaVersion,
                 Id = data.meta.id,
                 GameName = data.meta.gameName,
                 GamePlatform = data.meta.gamePlatform
             };
 
             // Load properties.
-            var properties = new List<GameHookPropertyNEW>();
+            var properties = new List<GameHookProperty>();
 
             TranserveMapperFile(instance, data, properties, data.properties, null, null);
 
@@ -93,10 +93,10 @@ namespace GameHook.Application
                 glossary.Add(x.Key, list);
             }
 
-            return new Mapper(metadata, properties, glossary);
+            return new Mapper(filesystemId, metadata, properties, glossary);
         }
 
-        private static void TranserveMapperFile(GameHookInstance instance, YamlRoot root, List<GameHookPropertyNEW> properties, IDictionary<object, object> source, string? key, MacroPointer? macroPointer)
+        private static void TranserveMapperFile(GameHookInstance instance, YamlRoot root, List<GameHookProperty> properties, IDictionary<object, object> source, string? key, MacroPointer? macroPointer)
         {
             var insideMacro = macroPointer != null;
 
@@ -157,7 +157,7 @@ namespace GameHook.Application
             }
         }
 
-        private static void ParseProperty(GameHookInstance instance, YamlRoot root, List<GameHookPropertyNEW> properties, IDictionary<object, object> source, string? key, MacroPointer? macroPointer)
+        private static void ParseProperty(GameHookInstance instance, YamlRoot root, List<GameHookProperty> properties, IDictionary<object, object> source, string? key, MacroPointer? macroPointer)
         {
             if (string.IsNullOrEmpty(key))
                 throw new Exception("Key cannot be null.");
@@ -206,7 +206,7 @@ namespace GameHook.Application
                     Description = description
                 };
 
-                properties.Add(new GameHookPropertyNEW(instance, variables));
+                properties.Add(new GameHookProperty(instance, variables));
             }
         }
     }

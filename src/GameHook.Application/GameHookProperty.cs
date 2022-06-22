@@ -23,9 +23,9 @@ namespace GameHook.Application
         public bool PropertyUpdated { get; init; }
     }
 
-    public class GameHookPropertyNEW
+    public class GameHookProperty
     {
-        public GameHookPropertyNEW(GameHookInstance gameHookInstance, GameHookMapperVariables mapperVariables)
+        public GameHookProperty(GameHookInstance gameHookInstance, GameHookMapperVariables mapperVariables)
         {
             GameHookInstance = gameHookInstance;
             MapperVariables = mapperVariables;

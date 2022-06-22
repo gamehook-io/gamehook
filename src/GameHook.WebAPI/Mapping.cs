@@ -1,4 +1,4 @@
-﻿using GameHook.Domain.Interfaces;
+﻿using GameHook.Application;
 using GameHook.WebAPI.Controllers;
 using Mapster;
 
@@ -12,17 +12,20 @@ namespace GameHook.WebAPI
 
             TypeAdapterConfig.GlobalSettings.RequireDestinationMemberSource = true;
 
-            TypeAdapterConfig<KeyValuePair<string, IGameHookProperty>, PropertyModel>.NewConfig()
-                .Map(dest => dest.Path, src => src.Key)
-                .Map(dest => dest.Type, src => src.Value.Type)
-                .Map(dest => dest.Address, src => src.Value.Address)
-                .Map(dest => dest.Size, src => src.Value.Size)
-                .Map(dest => dest.Position, src => src.Value.Fields.Position)
-                .Map(dest => dest.Reference, src => src.Value.Fields.Reference)
-                .Map(dest => dest.Value, src => src.Value.Value)
-                .Map(dest => dest.Bytes, src => src.Value.Bytes)
-                .Map(dest => dest.Frozen, src => src.Value.Frozen)
-                .Map(dest => dest.Description, src => src.Value.Fields.Description);
+            TypeAdapterConfig<Mapper, MapperModel>.NewConfig()
+                .Map(dest => dest.Meta, src => src.Metadata);
+
+            TypeAdapterConfig<GameHookProperty, PropertyModel>.NewConfig()
+                .Map(dest => dest.Path, src => src.Path)
+                .Map(dest => dest.Type, src => src.Type)
+                .Map(dest => dest.Address, src => src.Address)
+                .Map(dest => dest.Size, src => src.Size)
+                .Map(dest => dest.Position, src => src.MapperVariables.Position)
+                .Map(dest => dest.Reference, src => src.MapperVariables.Reference)
+                .Map(dest => dest.Value, src => src.Value)
+                .Map(dest => dest.Bytes, src => src.Bytes)
+                .Map(dest => dest.Frozen, src => src.IsFrozen)
+                .Map(dest => dest.Description, src => src.MapperVariables.Description);
         }
     }
 }

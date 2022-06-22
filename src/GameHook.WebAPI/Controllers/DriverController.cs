@@ -12,12 +12,10 @@ namespace GameHook.WebAPI.Controllers
     [Route("driver")]
     public class DriverController : Controller
     {
-        private readonly IGameHookContainerFactory _gameHookContainerFactory;
         private readonly IGameHookDriver _driver;
 
-        public DriverController(IGameHookContainerFactory gameHookContainerFactory, IGameHookDriver gameHookDriver)
+        public DriverController(IGameHookDriver gameHookDriver)
         {
-            _gameHookContainerFactory = gameHookContainerFactory;
             _driver = gameHookDriver;
         }
 
@@ -25,9 +23,6 @@ namespace GameHook.WebAPI.Controllers
         [SwaggerOperation("Write bytes back to the driver manually.")]
         public async Task<IActionResult> WriteMemory(UpdateMemoryModel model)
         {
-            if (_gameHookContainerFactory.LoadedMapper == null)
-                return ApiHelper.MapperNotLoaded();
-
             await _driver.WriteBytes(model.Address, model.Bytes);
 
             return Ok();
