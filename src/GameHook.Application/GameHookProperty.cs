@@ -1,4 +1,5 @@
 ﻿using GameHook.Domain;
+using GameHook.Domain.Interfaces;
 using GameHook.Domain.ValueTransformers;
 
 namespace GameHook.Application
@@ -55,27 +56,77 @@ namespace GameHook.Application
             }
         }
 
-        public GameHookPropertyProcessResult Process(byte[] data)
+        private static MemoryAddressBlock? GetBlockForAddress(MemoryAddress address, IEnumerable<MemoryAddressBlock> ranges)
         {
+            foreach (var range in ranges)
+            {
+                if (address >= range.StartingAddress && address <= range.EndingAddress)
+                {
+                    return range;
+                }
+            }
+
+            return null;
+        }
+
+        public GameHookPropertyProcessResult Process(ReadBytesResult driverResult)
+        {
+            byte[]? oldBytes = Bytes;
+            object? oldValue = Value;
+            byte[]? bytes = null;
+            object? value;
+
+            // Calculate the required address.
+            var address = MapperVariables.Address;
+
+            // Calculate the bytes from the driver range.
+            if (address != null)
+            {
+                // If the address is determined, grab the byte array.
+                var block = GetBlockForAddress((uint)address, GameHookInstance.GetPlatformOptions().Ranges);
+                if (block != null)
+                {
+                    var offsetaddress = address - block.StartingAddress;
+                    bytes = driverResult.Bytes[block.Name].Skip((int)offsetaddress).Take(Size).ToArray();
+                }
+            }
+
+            // TODO: HACK: Reverse the endian-ness for certain types.
+            if (Type != "string" && Type != "binaryCodedDecimal")
+            {
+                if (GameHookInstance.GetPlatformOptions().EndianType == EndianTypes.BigEndian)
+                    Array.Reverse(bytes);
+            }
+
             // Fast path - if the bytes match, then we can assume the property has not been
             // updated since last poll.
-            if (Address != null && Bytes != null && data.Get((uint)Address, Size).SequenceEqual(Bytes) == true)
+            if (bytes != null && oldBytes != null && bytes.SequenceEqual(oldBytes) == true)
             {
-                return new GameHookPropertyProcessResult() { PropertyUpdated = true };
+                return new GameHookPropertyProcessResult() { PropertyUpdated = false };
             }
 
-            if (Address != null)
+            if (bytes == null)
             {
-                var bytes = data.Get((uint)Address, Size);
-                Bytes = bytes;
+                throw new Exception($"Unable to calculate bytes for property '{Path}'");
             }
 
-            if (Bytes == null) throw new Exception($"Unable to calculate bytes for property '{Path}'");
+            value = Type switch
+            {
+                "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
+                "bitArray" => BitFieldTransformer.ToValue(bytes),
+                "bit" => BitTransformer.ToValue(bytes, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
+                "bool" => BooleanTransformer.ToValue(bytes),
+                "int" => IntegerTransformer.ToValue(bytes),
+                "reference" => ReferenceTransformer.ToValue(bytes, GameHookInstance.Mapper.Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
+                "string" => StringTransformer.ToValue(bytes, GameHookInstance.Mapper.Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
+                "uint" => UnsignedIntegerTransformer.ToValue(bytes),
+                _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
+            };
 
-            if (Type == "int") Value = IntegerTransformer.ToValue(Bytes);
-            else Value = "no value yet";
+            Bytes = bytes;
+            Value = value;
 
-            return new GameHookPropertyProcessResult() { PropertyUpdated = true };
+            return new GameHookPropertyProcessResult() { PropertyUpdated = value != oldValue };
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously

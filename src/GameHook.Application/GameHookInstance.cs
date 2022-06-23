@@ -37,6 +37,7 @@ namespace GameHook.Application
     {
         private ILogger<GameHookInstance> Logger { get; }
         private IMapperFilesystemProvider MapperFilesystemProvider { get; }
+        private Task? ReadLoop { get; set; }
         public IGameHookDriver? Driver { get; private set; }
         public Mapper? Mapper { get; private set; }
         public IPlatformOptions? PlatformOptions { get; private set; }
@@ -47,6 +48,8 @@ namespace GameHook.Application
             Logger = logger;
             MapperFilesystemProvider = provider;
         }
+
+        public IPlatformOptions GetPlatformOptions() => PlatformOptions ?? throw new Exception("PlatformOptions is null.");
 
         public async Task Load(IGameHookDriver driver, string mapperId)
         {
@@ -64,25 +67,41 @@ namespace GameHook.Application
                 _ => throw new Exception($"Unknown game platform {Mapper.Metadata.GamePlatform}.")
             };
 
+            Logger.LogInformation("AAAAAAA");
             await Read();
+            Logger.LogInformation("BBBB");
+
+            var task = Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    await Read();
+                    await Task.Delay(5);
+                }
+            }, TaskCreationOptions.LongRunning);
 
             Initalized = true;
         }
 
         public async Task Read()
         {
-            if (Driver == null)             throw new Exception("Driver is null.");
-            if (PlatformOptions == null)    throw new Exception("Platform options are null.");
+            if (Driver == null) throw new Exception("Driver is null.");
+            if (PlatformOptions == null) throw new Exception("Platform options are null.");
             if (Mapper == null) throw new Exception("Mapper is null.");
 
             var driverResult = await Driver.ReadBytes(PlatformOptions.Ranges);
 
-            foreach (var property in Mapper.Properties)
+            Parallel.ForEach(Mapper.Properties, x =>
             {
-                property.Process(driverResult.Bytes.First().Value);
-            }
-
-            await Task.CompletedTask;
+                try
+                {
+                    x.Process(driverResult);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, $"Unable to translate property {x.Path}.");
+                }
+            });
         }
     }
 }

@@ -193,7 +193,7 @@ namespace GameHook.Domain.Drivers
             }
             sw.Stop();
 
-            Logger.LogInformation($"Time for reading took: {sw.ElapsedMilliseconds}ms");
+            Logger.LogDebug($"Time for reading took: {sw.ElapsedMilliseconds}ms");
 
             return result;
         }
