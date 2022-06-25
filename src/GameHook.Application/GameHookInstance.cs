@@ -33,54 +33,100 @@ namespace GameHook.Application
         public string GamePlatform { get; init; } = string.Empty;
     }
 
+    // TODO: Use LastReadException instead.
+    public enum LastReadHints
+    {
+        OK,
+        DriverTimeout,
+        DriverFailure,
+        PropertyFailure
+    }
+
     public class GameHookInstance
     {
+        private const int LOAD_TIMEOUT_MS = 120 * 10;
         private ILogger<GameHookInstance> Logger { get; }
         private IMapperFilesystemProvider MapperFilesystemProvider { get; }
-        private Task? ReadLoop { get; set; }
+        private IClientNotifier ClientNotifier { get; }
+        public bool Initalized { get; private set; } = false;
+        public DateTime? LastSuccessfulRead { get; private set; }
+        public LastReadHints LastReadHint { get; private set; }
+        public Exception? LastReadException { get; private set; }
         public IGameHookDriver? Driver { get; private set; }
         public Mapper? Mapper { get; private set; }
         public IPlatformOptions? PlatformOptions { get; private set; }
-        public bool Initalized { get; private set; } = false;
 
-        public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider)
+        public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider, IClientNotifier clientNotifier)
         {
             Logger = logger;
             MapperFilesystemProvider = provider;
+            ClientNotifier = clientNotifier;
+
+            Task.Factory.StartNew(async () =>
+            {
+                while (true)
+                {
+                    if (Initalized)
+                    {
+                        await Read();
+                    }
+
+                    await Task.Delay(5);
+                }
+            }, TaskCreationOptions.LongRunning);
         }
 
         public IPlatformOptions GetPlatformOptions() => PlatformOptions ?? throw new Exception("PlatformOptions is null.");
 
-        public async Task Load(IGameHookDriver driver, string mapperId)
+        public void ResetState()
         {
-            Logger.LogInformation("Initializing GameHook instance...");
+            Initalized = false;
+            LastSuccessfulRead = null;
 
-            Driver = driver;
-            Mapper = MapperFactory.ReadMapper(this, MapperFilesystemProvider, mapperId);
+            Driver = null;
+            Mapper = null;
+            PlatformOptions = null;
+        }
 
-            PlatformOptions = Mapper.Metadata.GamePlatform switch
+        public void Load(IGameHookDriver driver, string mapperId)
+        {
+            ResetState();
+
+            try
             {
-                "NES" => new NES_PlatformOptions(),
-                "SNES" => new SNES_PlatformOptions(),
-                "GB" => new GB_PlatformOptions(),
-                "GBA" => new GBA_PlatformOptions(),
-                _ => throw new Exception($"Unknown game platform {Mapper.Metadata.GamePlatform}.")
-            };
+                Logger.LogInformation("Loading GameHook instance...");
 
-            Logger.LogInformation("AAAAAAA");
-            await Read();
-            Logger.LogInformation("BBBB");
-
-            var task = Task.Factory.StartNew(async () =>
-            {
-                while (true)
+                Driver = driver;
+                Mapper = MapperFactory.ReadMapper(this, MapperFilesystemProvider, mapperId);
+                PlatformOptions = Mapper.Metadata.GamePlatform switch
                 {
-                    await Read();
-                    await Task.Delay(5);
-                }
-            }, TaskCreationOptions.LongRunning);
+                    "NES" => new NES_PlatformOptions(),
+                    "SNES" => new SNES_PlatformOptions(),
+                    "GB" => new GB_PlatformOptions(),
+                    "GBA" => new GBA_PlatformOptions(),
+                    _ => throw new Exception($"Unknown game platform {Mapper.Metadata.GamePlatform}.")
+                };
 
-            Initalized = true;
+                Initalized = true;
+
+                // The loop will begin reading memory, wait until a successful run has completed.
+                SpinWait.SpinUntil(() => LastSuccessfulRead != null, TimeSpan.FromMilliseconds(LOAD_TIMEOUT_MS));
+
+                if (LastSuccessfulRead == null)
+                {
+                    ResetState();
+
+                    if (LastReadHint == LastReadHints.DriverFailure) Logger.LogError("Instance could not successfully load due to a driver error.");
+                    else if (LastReadHint == LastReadHints.DriverTimeout) Logger.LogError("Instance could not successfully load due to a driver timeout.");
+                    else if (LastReadHint == LastReadHints.PropertyFailure) Logger.LogError("Instance could not successfully load due to a property translation error.");
+                    else Logger.LogError("Instance could not successfully load due to an error.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "An unknown error occured when loading the mapper file.");
+                ResetState();
+            }
         }
 
         public async Task Read()
@@ -89,7 +135,30 @@ namespace GameHook.Application
             if (PlatformOptions == null) throw new Exception("Platform options are null.");
             if (Mapper == null) throw new Exception("Mapper is null.");
 
-            var driverResult = await Driver.ReadBytes(PlatformOptions.Ranges);
+            ReadBytesResult? driverResult = null;
+
+            try
+            {
+                driverResult = await Driver.ReadBytes(PlatformOptions.Ranges);
+            }
+            catch (Exception ex)
+            {
+                if (ex is DriverTimeoutException) LastReadHint = LastReadHints.DriverTimeout;
+                else if (ex is DriverDisconnectedException) LastReadHint = LastReadHints.DriverFailure;
+                else if (ex is DriverShutdownException) LastReadHint = LastReadHints.DriverFailure;
+
+                // The instance could have already uninitalized, so don't log an error.
+                if (Initalized)
+                {
+                    Logger.LogError(ex, "Instance could not read from driver.");
+                    await ClientNotifier.SendDriverError(new Domain.DTOs.ProblemDetailsForClientDTO() { Title = "Driver error.", Detail = ex.Message });
+                }
+            }
+
+            if (driverResult == null)
+            {
+                return;
+            }
 
             Parallel.ForEach(Mapper.Properties, x =>
             {
@@ -99,9 +168,12 @@ namespace GameHook.Application
                 }
                 catch (Exception ex)
                 {
+                    LastReadHint = LastReadHints.PropertyFailure;
                     Logger.LogError(ex, $"Unable to translate property {x.Path}.");
                 }
             });
+
+            LastSuccessfulRead = DateTime.UtcNow;
         }
     }
 }
