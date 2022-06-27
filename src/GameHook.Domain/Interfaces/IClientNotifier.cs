@@ -8,7 +8,7 @@ namespace GameHook.Domain.Interfaces
         Task SendMapperLoading();
         Task SendMapperLoaded();
         Task SendDriverError(ProblemDetailsForClientDTO details);
-        Task SendPropertyChanged(string key, object? value, IEnumerable<int> bytes, bool frozen);
+        Task SendPropertyChanged(string key, object? value, byte[]? bytes, bool frozen);
         Task SendPropertyFrozen(string key);
         Task SendPropertyUnfrozen(string key);
     }

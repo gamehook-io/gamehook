@@ -59,7 +59,7 @@ namespace GameHook.Domain.Drivers
                     {
                         if (UdpClient == null || UdpClient.Client.Connected == false)
                         {
-                            Logger.LogWarning("UdpClient is not connected -- reestablishing connection.");
+                            Logger.LogDebug("UdpClient is not connected -- reestablishing connection.");
 
                             CreateUdpClient();
                         }
@@ -152,48 +152,34 @@ namespace GameHook.Domain.Drivers
             string receiveString = Encoding.ASCII.GetString(receiveBytes).Replace("\n", string.Empty);
             Logger.LogTrace($"[Incoming Packet] {receiveString}");
 
-            try
+            var splitString = receiveString.Split(' ');
+            var command = splitString[0];
+            var memoryAddressString = splitString[1];
+            var valueStringArray = splitString[2..];
+
+            if (valueStringArray[0] == "-1")
             {
-                var splitString = receiveString.Split(' ');
-                var command = splitString[0];
-                var memoryAddressString = splitString[1];
-                var valueStringArray = splitString[2..];
-
-                if (valueStringArray[0] == "-1")
-                {
-                    Logger.LogError($"RetroArch sent back an error: {receiveString}");
-                    return;
-                }
-
-                var memoryAddress = Convert.ToUInt32(memoryAddressString, 16);
-                var value = valueStringArray.Select(x => Convert.ToByte(x, 16)).ToArray();
-
-                var receiveKey = $"{command} {memoryAddressString} {valueStringArray.Length}";
-
-                Responses[receiveKey] = new ReceivedPacket(command, memoryAddress, value);
-                Logger.LogDebug($"[Incoming Packet] Set response {receiveKey}");
+                throw new DriverErrorException(receiveString);
             }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, $"ReceivePacket error on incoming packet: {receiveString}");
-            }
+
+            var memoryAddress = Convert.ToUInt32(memoryAddressString, 16);
+            var value = valueStringArray.Select(x => Convert.ToByte(x, 16)).ToArray();
+
+            var receiveKey = $"{command} {memoryAddressString} {valueStringArray.Length}";
+
+            Responses[receiveKey] = new ReceivedPacket(command, memoryAddress, value);
+            Logger.LogDebug($"[Incoming Packet] Set response {receiveKey}");
         }
 
         public async Task<ReadBytesResult> ReadBytes(IEnumerable<MemoryAddressBlock> blocks)
         {
             var result = new ReadBytesResult();
 
-            Stopwatch sw = new Stopwatch();
-
-            sw.Start();
             foreach (var block in blocks)
             {
                 var blockResult = await ReadMemoryAddress(block.StartingAddress, block.EndingAddress - block.StartingAddress);
                 result.Bytes[block.Name] = blockResult.Value;
             }
-            sw.Stop();
-
-            Logger.LogDebug($"Time for reading took: {sw.ElapsedMilliseconds}ms");
 
             return result;
         }

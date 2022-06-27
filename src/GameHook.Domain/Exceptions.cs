@@ -26,6 +26,11 @@ namespace GameHook.Domain
         }
     }
 
+    public class DriverErrorException :Exception
+    {
+        public DriverErrorException(string message) : base(message) { }
+    }
+
     public class DriverDisconnectedException : Exception
     {
         public DriverDisconnectedException(string? message, Exception? innerException) : base(message: message, innerException: innerException) { }

@@ -23,7 +23,7 @@ namespace GameHook.WebAPI.ClientNotifiers
 
         public Task SendDriverError(ProblemDetailsForClientDTO _) => Task.CompletedTask;
 
-        public async Task SendPropertyChanged(string key, object? value, IEnumerable<int> bytes, bool frozen)
+        public async Task SendPropertyChanged(string key, object? value, byte[]? bytes, bool frozen)
         {
             await File.WriteAllTextAsync(Path.Combine(BuildEnvironment.OutputPropertiesDirectory, $"{key}.txt"), value?.ToString());
         }
