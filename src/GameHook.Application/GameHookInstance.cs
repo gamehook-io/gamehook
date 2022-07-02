@@ -1,5 +1,6 @@
 ﻿using GameHook.Domain;
 using GameHook.Domain.Interfaces;
+using GameHook.Domain.Preprocessors;
 using Microsoft.Extensions.Logging;
 
 namespace GameHook.Application
@@ -33,13 +34,9 @@ namespace GameHook.Application
         public string GamePlatform { get; init; } = string.Empty;
     }
 
-    // TODO: Use LastReadException instead.
-    public enum LastReadHints
+    public class PreprocessorCache
     {
-        OK,
-        DriverTimeout,
-        DriverFailure,
-        PropertyFailure
+        public Dictionary<MemoryAddress, DataBlock_a245dcac>? data_block_a245dcac { get; set; }
     }
 
     public class GameHookInstance
@@ -85,7 +82,7 @@ namespace GameHook.Application
 
             try
             {
-                Logger.LogInformation("Loading GameHook instance...");
+                Logger.LogDebug("Creating GameHook mapper instance...");
 
                 Driver = driver;
                 Mapper = MapperFactory.ReadMapper(this, MapperFilesystemProvider, mapperId);
@@ -104,8 +101,8 @@ namespace GameHook.Application
                                 .Where(x => addressesToWatch.Any(y => y.Between(x.StartingAddress, x.EndingAddress)))
                                 .ToList();
 
-                Logger.LogInformation($"Requested {BlocksToRead.Count()}/{PlatformOptions.Ranges.Count()} ranges of memory.");
-                Logger.LogInformation($"Requested ranges: {string.Join(", ", BlocksToRead.Select(x => x.Name))}");
+                Logger.LogDebug($"Requested {BlocksToRead.Count()}/{PlatformOptions.Ranges.Count()} ranges of memory.");
+                Logger.LogDebug($"Requested ranges: {string.Join(", ", BlocksToRead.Select(x => x.Name))}");
 
                 await Read();
 
@@ -114,10 +111,12 @@ namespace GameHook.Application
                 // Start the read loop once successfully running once.
                 ReadLoopToken = new CancellationTokenSource();
                 _ = Task.Run(ReadLoop, ReadLoopToken.Token);
+
+                Logger.LogInformation($"Loaded mapper for {Mapper.Metadata.GameName}.");
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "An unknown error occured when loading the mapper file.");
+                Logger.LogError(ex, "An error occured when loading the mapper.");
 
                 ResetState();
             }
@@ -141,11 +140,44 @@ namespace GameHook.Application
 
             var driverResult = await Driver.ReadBytes(BlocksToRead);
 
+            // Preprocessor Cache
+            // Certain preprocessors are costly to run for every property, so cache them here.
+
+            var preprocessorCache = new PreprocessorCache();
+
+            // data_block_a245dcac
+            var dataBlock_a245dcac_Properties = Mapper.Properties
+                .Where(x => x.MapperVariables.Preprocessor?.StartsWith("data_block_a245dcac(") ?? false)
+                .GroupBy(x => x.MapperVariables.Address)
+                .ToList();
+
+            if (dataBlock_a245dcac_Properties != null)
+            {
+                preprocessorCache.data_block_a245dcac = new Dictionary<uint, DataBlock_a245dcac>();
+
+                // Key is the starting memory address block.
+                dataBlock_a245dcac_Properties.ForEach(x =>
+                {
+                    var key = x.Key ?? 0;
+
+                    Logger.LogDebug($"Creating a preprocessor cache for data_block_a245dcac[{key}].");
+
+                    var block = driverResult.GetResultWithinRange(key);
+                    if (block == null) { throw new Exception("Unknown block for preprocessor."); }
+
+                    preprocessorCache.data_block_a245dcac[key] = Preprocessors.decrypt_data_block_a245dcac(block.Data, key);
+                });
+            }
+
+            // Processor
             Parallel.ForEach(Mapper.Properties, async x =>
             {
                 try
                 {
-                    var result = x.Process(driverResult);
+                    var blockResult = driverResult.GetResultWithinRange(x.Address ?? 0);
+                    if (blockResult == null) { throw new Exception($"Could not get result within block range {x.Address}."); }
+
+                    var result = x.Process(blockResult, preprocessorCache);
 
                     if (result.PropertyUpdated)
                     {

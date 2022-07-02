@@ -69,26 +69,37 @@ namespace GameHook.Application
             return null;
         }
 
-        public GameHookPropertyProcessResult Process(ReadBytesResult driverResult)
+        public GameHookPropertyProcessResult Process(MemoryAddressBlockResult blockResult, PreprocessorCache preprocessorCache)
         {
             byte[]? oldBytes = Bytes;
             object? oldValue = Value;
+
+            uint? address = null;
             byte[]? bytes = null;
-            object? value;
 
-            // Calculate the required address.
-            var address = MapperVariables.Address;
-
-            // Calculate the bytes from the driver range.
-            if (address != null)
+            // Preprocessors.
+            if (MapperVariables.Preprocessor != null && MapperVariables.Preprocessor.Contains("data_block_a245dcac"))
             {
-                // If the address is determined, grab the byte array.
+                address = MapperVariables.Address;
+                bytes = new byte[5] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+            }
+            else if (MapperVariables.Address != null)
+            {
+                // Calculate the bytes from the driver range and address property.
+                address = MapperVariables.Address;
+
                 var block = GetBlockForAddress((uint)address, GameHookInstance.GetPlatformOptions().Ranges);
                 if (block != null)
                 {
                     var offsetaddress = address - block.StartingAddress;
-                    bytes = driverResult.Bytes[block.Name].Skip((int)offsetaddress).Take(Size).ToArray();
+                    bytes = blockResult.Data.Skip((int)offsetaddress).Take(Size).ToArray();
                 }
+            }
+
+            // Once preprocessors are ran, we can begin finding the value.
+            if (bytes == null)
+            {
+                throw new Exception($"Unable to calculate bytes for property '{Path}'");
             }
 
             // TODO: HACK: Reverse the endian-ness for certain types.
@@ -105,12 +116,7 @@ namespace GameHook.Application
                 return new GameHookPropertyProcessResult() { PropertyUpdated = false };
             }
 
-            if (bytes == null)
-            {
-                throw new Exception($"Unable to calculate bytes for property '{Path}'");
-            }
-
-            value = Type switch
+            object? value = Type switch
             {
                 "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
                 "bitArray" => BitFieldTransformer.ToValue(bytes),
@@ -123,6 +129,7 @@ namespace GameHook.Application
                 _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
             };
 
+            Address = address;
             Bytes = bytes;
             Value = value;
 

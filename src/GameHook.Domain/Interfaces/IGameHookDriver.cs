@@ -1,10 +1,5 @@
 namespace GameHook.Domain.Interfaces
 {
-    public record ReadBytesResult
-    {
-        public Dictionary<string, byte[]> Bytes { get; init; } = new Dictionary<string, byte[]>();
-    }
-
     /// <summary>
     /// Driver interface for interacting with a emulator.
     /// 
@@ -15,7 +10,7 @@ namespace GameHook.Domain.Interfaces
     {
         string ProperName { get; }
 
-        Task<ReadBytesResult> ReadBytes(IEnumerable<MemoryAddressBlock> blocks);
+        Task<IEnumerable<MemoryAddressBlockResult>> ReadBytes(IEnumerable<MemoryAddressBlock> blocks);
 
         Task WriteBytes(MemoryAddress startingMemoryAddress, byte[] values);
     }

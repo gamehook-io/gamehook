@@ -170,6 +170,8 @@ namespace GameHook.Application
             var reference = source.ContainsKey("reference") ? source["reference"].ToString() : null;
             var macro = source.ContainsKey("macro") ? source["macro"].ToString() : null;
             var offset = (int?)(source.ContainsKey("offset") ? int.Parse(source["offset"].ToString() ?? string.Empty) : null);
+            var preprocessor = source.ContainsKey("preprocessor") ? source["preprocessor"].ToString() : null;
+            var expression = source.ContainsKey("expression") ? source["expression"].ToString() : null;
 
             long address;
             if (macroPointer != null)
@@ -198,11 +200,13 @@ namespace GameHook.Application
                 {
                     Path = key,
 
+                    Preprocessor = preprocessor,
                     Type = type,
                     Address = (MemoryAddress)address,
                     Size = size,
                     Position = position,
                     Reference = reference,
+                    Expression = expression,
                     Description = description
                 };
 

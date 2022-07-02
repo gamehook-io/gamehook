@@ -1,6 +1,5 @@
 using GameHook.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -121,7 +120,7 @@ namespace GameHook.Domain.Drivers
             Logger.LogTrace($"[Outgoing Packet] {outgoingPayload}");
         }
 
-        private async Task<ReceivedPacket> ReadMemoryAddress(MemoryAddress memoryAddress, uint length)
+        private async Task<byte[]> ReadMemoryAddress(MemoryAddress memoryAddress, uint length)
         {
             var command = $"READ_CORE_MEMORY {ToRetroArchHexdecimalString(memoryAddress)}";
             await SendPacket(command, $"{length}");
@@ -144,7 +143,7 @@ namespace GameHook.Domain.Drivers
                 throw new DriverTimeoutException(memoryAddress, "RetroArch", null);
             }
 
-            return readCoreMemoryResult;
+            return readCoreMemoryResult.Value;
         }
 
         private void ReceivePacket(byte[] receiveBytes)
@@ -171,17 +170,13 @@ namespace GameHook.Domain.Drivers
             Logger.LogDebug($"[Incoming Packet] Set response {receiveKey}");
         }
 
-        public async Task<ReadBytesResult> ReadBytes(IEnumerable<MemoryAddressBlock> blocks)
+        public async Task<IEnumerable<MemoryAddressBlockResult>> ReadBytes(IEnumerable<MemoryAddressBlock> blocks)
         {
-            var result = new ReadBytesResult();
-
-            foreach (var block in blocks)
+            return (await Task.WhenAll(blocks.Select(async x =>
             {
-                var blockResult = await ReadMemoryAddress(block.StartingAddress, block.EndingAddress - block.StartingAddress);
-                result.Bytes[block.Name] = blockResult.Value;
-            }
-
-            return result;
+                var data = await ReadMemoryAddress(x.StartingAddress, x.EndingAddress - x.StartingAddress);
+                return new MemoryAddressBlockResult(x.Index, x.Name, x.StartingAddress, x.EndingAddress, data);
+            }))).ToList();
         }
     }
 }

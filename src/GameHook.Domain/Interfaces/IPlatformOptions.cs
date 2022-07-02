@@ -4,6 +4,6 @@
     {
         public EndianTypes EndianType { get; }
 
-        public IEnumerable<MemoryAddressBlock> Ranges { get; }
+        public MemoryAddressBlock[] Ranges { get; }
     }
 }
