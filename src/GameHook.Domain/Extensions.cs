@@ -46,9 +46,10 @@ namespace GameHook.Domain
             return data.Skip((int)skip).Take(take).ToArray();
         }
 
-        public static MemoryAddressBlockResult? GetResultWithinRange(this IEnumerable<MemoryAddressBlockResult> blocks, uint address)
+        public static MemoryAddressBlockResult GetResultWithinRange(this IEnumerable<MemoryAddressBlockResult> blocks, uint address)
         {
-            return blocks.SingleOrDefault(x => address > x.StartingAddress && address < x.EndingAddress);
+            return blocks.SingleOrDefault(x => address > x.StartingAddress && address < x.EndingAddress) ??
+                throw new Exception($"Cannot GetResultWithinRange for address {address}.");
         }
     }
 }

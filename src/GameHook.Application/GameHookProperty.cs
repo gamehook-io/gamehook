@@ -1,5 +1,4 @@
 ﻿using GameHook.Domain;
-using GameHook.Domain.Interfaces;
 using GameHook.Domain.ValueTransformers;
 
 namespace GameHook.Application
@@ -69,7 +68,7 @@ namespace GameHook.Application
             return null;
         }
 
-        public GameHookPropertyProcessResult Process(MemoryAddressBlockResult blockResult, PreprocessorCache preprocessorCache)
+        public async Task<GameHookPropertyProcessResult> Process(IEnumerable<MemoryAddressBlockResult> driverResult, PreprocessorCache preprocessorCache)
         {
             byte[]? oldBytes = Bytes;
             object? oldValue = Value;
@@ -82,6 +81,9 @@ namespace GameHook.Application
             {
                 address = MapperVariables.Address;
                 bytes = new byte[5] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+
+                Address = address;
+                Bytes = bytes;
             }
             else if (MapperVariables.Address != null)
             {
@@ -92,11 +94,19 @@ namespace GameHook.Application
                 if (block != null)
                 {
                     var offsetaddress = address - block.StartingAddress;
-                    bytes = blockResult.Data.Skip((int)offsetaddress).Take(Size).ToArray();
+                    bytes = driverResult.GetResultWithinRange(address ?? 0).Data.Skip((int)offsetaddress).Take(Size).ToArray();
                 }
+
+                Address = address;
+                Bytes = bytes;
             }
 
             // Once preprocessors are ran, we can begin finding the value.
+            if (address == null)
+            {
+                throw new Exception($"Unable to calculate address for property '{Path}'");
+            }
+
             if (bytes == null)
             {
                 throw new Exception($"Unable to calculate bytes for property '{Path}'");
@@ -129,9 +139,20 @@ namespace GameHook.Application
                 _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
             };
 
-            Address = address;
-            Bytes = bytes;
             Value = value;
+
+            if (value != oldValue)
+            {
+                if (IsFrozen)
+                {
+                    await GameHookInstance.GetDriver().WriteBytes(address ?? 0, bytes);
+                }
+
+                foreach (var notifier in GameHookInstance.ClientNotifiers)
+                {
+                    await notifier.SendPropertyChanged(Path, Value, Bytes, IsFrozen);
+                }
+            }
 
             return new GameHookPropertyProcessResult() { PropertyUpdated = value != oldValue };
         }
@@ -157,14 +178,24 @@ namespace GameHook.Application
             if (freeze == true)
             {
                 BytesFrozen = bytes;
+
+                foreach (var notifier in GameHookInstance.ClientNotifiers)
+                {
+                    await notifier.SendPropertyFrozen(Path);
+                }
             }
 
             await GameHookInstance.Driver.WriteBytes((uint)Address, bytes);
         }
 
-        public void UnfreezeProperty()
+        public async Task UnfreezeProperty()
         {
             BytesFrozen = null;
+
+            foreach (var notifier in GameHookInstance.ClientNotifiers)
+            {
+                await notifier.SendPropertyUnfrozen(Path);
+            }
         }
 
         public override string ToString()

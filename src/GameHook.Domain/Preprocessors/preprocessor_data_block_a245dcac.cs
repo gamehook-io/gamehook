@@ -8,23 +8,15 @@
 
     public static partial class Preprocessors
     {
-        private static byte[] ReorderByteArrays(int[] order, byte[] data)
-        {
-            byte[] reorderedData = new byte[data.Length];
-
-            data[0..11].CopyTo(reorderedData, order[0] * 12);
-            data[12..24].CopyTo(reorderedData, order[1] * 12);
-            data[25..32].CopyTo(reorderedData, order[2] * 12);
-            data[33..48].CopyTo(reorderedData, order[3] * 12);
-
-            return reorderedData;
-        }
-
         // Used beforehand to cache the data block.
-        public static DataBlock_a245dcac decrypt_data_block_a245dcac(byte[] entireBlock, uint startingAddress)
+        public static DataBlock_a245dcac decrypt_data_block_a245dcac(IEnumerable<MemoryAddressBlockResult> blocks, uint startingAddress)
         {
-            var personalityValue = 0;
-            var originalTrainerId = 0;
+            var block = blocks.GetResultWithinRange(startingAddress);
+            var adjustedStartingAddress = block.StartingAddress - startingAddress;
+
+            var structureStartingAddress = adjustedStartingAddress - 48;
+            var personalityValue = block.Data[structureStartingAddress + 16];
+            var originalTrainerId = block.Data[structureStartingAddress + 32];
 
             // The order of the structures is determined by the personality value of the Pokémon modulo 24,
             // as shown below, where G, A, E, and M stand for the substructures growth, attacks, EVs and condition, and miscellaneous, respectively.
@@ -60,13 +52,11 @@
                 _ => throw new Exception($"data_block_a245dcac returned a unknown substructure order given a personality value of {personalityValue} => {substructure}.")
             };
 
-            var substructureReorderedData = ReorderByteArrays(substructureOrder, entireBlock);
-
             // To obtain the 32-bit decryption key, the entire Original Trainer ID number must be XORed with the personality value of the entry.
             var decryptionKey = originalTrainerId ^ personalityValue;
 
             // This key can then be used to decrypt the data by XORing it, 32 bits (or 4 bytes) at a time.
-            var decryptedByteArray = entireBlock;
+            var decryptedByteArray = block.Data;
 
             // Return the byte array decrypted.
             return new DataBlock_a245dcac()

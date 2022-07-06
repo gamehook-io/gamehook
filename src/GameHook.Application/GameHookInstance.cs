@@ -43,7 +43,7 @@ namespace GameHook.Application
     {
         private ILogger<GameHookInstance> Logger { get; }
         private IMapperFilesystemProvider MapperFilesystemProvider { get; }
-        private IEnumerable<IClientNotifier> ClientNotifier { get; }
+        public IEnumerable<IClientNotifier> ClientNotifiers { get; }
         public bool Initalized { get; private set; } = false;
         private CancellationTokenSource? ReadLoopToken { get; set; }
         public IGameHookDriver? Driver { get; private set; }
@@ -51,14 +51,15 @@ namespace GameHook.Application
         public IPlatformOptions? PlatformOptions { get; private set; }
         public IEnumerable<MemoryAddressBlock>? BlocksToRead { get; private set; }
 
-        public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider, IEnumerable<IClientNotifier> clientNotifier)
+        public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider, IEnumerable<IClientNotifier> clientNotifiers)
         {
             Logger = logger;
             MapperFilesystemProvider = provider;
-            ClientNotifier = clientNotifier;
+            ClientNotifiers = clientNotifiers;
         }
 
         public IPlatformOptions GetPlatformOptions() => PlatformOptions ?? throw new Exception("PlatformOptions is null.");
+        public IGameHookDriver GetDriver() => Driver ?? throw new Exception("Driver is null.");
 
         public void ResetState()
         {
@@ -142,13 +143,12 @@ namespace GameHook.Application
 
             // Preprocessor Cache
             // Certain preprocessors are costly to run for every property, so cache them here.
-
             var preprocessorCache = new PreprocessorCache();
 
             // data_block_a245dcac
             var dataBlock_a245dcac_Properties = Mapper.Properties
                 .Where(x => x.MapperVariables.Preprocessor?.StartsWith("data_block_a245dcac(") ?? false)
-                .GroupBy(x => x.MapperVariables.Address)
+                .GroupBy(x => x.MapperVariables.Address ?? 0)
                 .ToList();
 
             if (dataBlock_a245dcac_Properties != null)
@@ -158,14 +158,8 @@ namespace GameHook.Application
                 // Key is the starting memory address block.
                 dataBlock_a245dcac_Properties.ForEach(x =>
                 {
-                    var key = x.Key ?? 0;
-
-                    Logger.LogDebug($"Creating a preprocessor cache for data_block_a245dcac[{key}].");
-
-                    var block = driverResult.GetResultWithinRange(key);
-                    if (block == null) { throw new Exception("Unknown block for preprocessor."); }
-
-                    preprocessorCache.data_block_a245dcac[key] = Preprocessors.decrypt_data_block_a245dcac(block.Data, key);
+                    Logger.LogDebug($"Creating a preprocessor cache for data_block_a245dcac[{x.Key}].");
+                    preprocessorCache.data_block_a245dcac[x.Key] = Preprocessors.decrypt_data_block_a245dcac(driverResult, x.Key);
                 });
             }
 
@@ -174,14 +168,11 @@ namespace GameHook.Application
             {
                 try
                 {
-                    var blockResult = driverResult.GetResultWithinRange(x.Address ?? 0);
-                    if (blockResult == null) { throw new Exception($"Could not get result within block range {x.Address}."); }
-
-                    var result = x.Process(blockResult, preprocessorCache);
+                    var result = await x.Process(driverResult, preprocessorCache);
 
                     if (result.PropertyUpdated)
                     {
-                        foreach (var notifier in ClientNotifier)
+                        foreach (var notifier in ClientNotifiers)
                         {
                             await notifier.SendPropertyChanged(x.Path, x.Value, x.Bytes, x.IsFrozen);
                         }

@@ -220,7 +220,7 @@ namespace GameHook.WebAPI.Controllers
             }
             else if (model.Freeze == false)
             {
-                prop.UnfreezeProperty();
+                await prop.UnfreezeProperty();
             }
 
             return Ok();
