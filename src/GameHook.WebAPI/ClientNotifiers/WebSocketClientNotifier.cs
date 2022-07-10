@@ -1,3 +1,4 @@
+using GameHook.Domain;
 using GameHook.Domain.DTOs;
 using GameHook.Domain.Interfaces;
 using GameHook.WebAPI.Hubs;
@@ -26,7 +27,7 @@ namespace GameHook.WebAPI.ClientNotifiers
             _hubContext.Clients.All.SendAsync("DriverError", problemDetails);
 
         public Task SendPropertyChanged(string key, object? value, byte[]? bytes, bool frozen) =>
-            _hubContext.Clients.All.SendAsync("PropertyChanged", key, value, bytes, frozen);
+            _hubContext.Clients.All.SendAsync("PropertyChanged", key, value, bytes?.ToIntegerArray(), frozen);
 
         public Task SendPropertyFrozen(string key) =>
             _hubContext.Clients.All.SendAsync("PropertyFrozen", key);

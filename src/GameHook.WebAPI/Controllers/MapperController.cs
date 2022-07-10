@@ -201,6 +201,7 @@ namespace GameHook.WebAPI.Controllers
                 return ApiHelper.MapperNotLoaded();
 
             path = path.StripEndingRoute().FromRouteToPath();
+            var bytes = model.Bytes?.Select(x => (byte)x).ToArray();
 
             var prop = Instance.Mapper.GetPropertyByPath(path);
 
@@ -214,9 +215,13 @@ namespace GameHook.WebAPI.Controllers
             {
                 await prop.WriteValue(model.Value, model.Freeze);
             }
-            else if (model.Bytes != null)
+            else if (model.Bytes != null && bytes != null)
             {
-                await prop.WriteBytes(model.Bytes.Select(x => (byte)x).ToArray(), model.Freeze);
+                await prop.WriteBytes(bytes, model.Freeze);
+            }
+            else if (model.Freeze == true)
+            {
+                await prop.FreezeProperty(prop.Bytes ?? throw new Exception($"Property {prop.Path} does not have bytes."));
             }
             else if (model.Freeze == false)
             {
