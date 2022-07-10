@@ -128,8 +128,8 @@ namespace GameHook.Application
                 "bit" => BitTransformer.ToValue(bytes2, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
                 "bool" => BooleanTransformer.ToValue(bytes2),
                 "int" => IntegerTransformer.ToValue(bytes2),
-                "reference" => ReferenceTransformer.ToValue(bytes2, GameHookInstance.Mapper.Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
-                "string" => StringTransformer.ToValue(bytes, GameHookInstance.Mapper.Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
+                "reference" => ReferenceTransformer.ToValue(bytes2, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
+                "string" => StringTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
                 "uint" => UnsignedIntegerTransformer.ToValue(bytes2),
                 _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
             };
@@ -147,9 +147,13 @@ namespace GameHook.Application
                 {
                     await notifier.SendPropertyChanged(Path, Value, Bytes, IsFrozen);
                 }
-            }
 
-            return new GameHookPropertyProcessResult() { PropertyUpdated = value != oldValue };
+                return new GameHookPropertyProcessResult() { PropertyUpdated = true };
+            }
+            else
+            {
+                return new GameHookPropertyProcessResult() { PropertyUpdated = false };
+            }
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously

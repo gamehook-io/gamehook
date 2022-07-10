@@ -60,6 +60,7 @@ namespace GameHook.Application
 
         public IPlatformOptions GetPlatformOptions() => PlatformOptions ?? throw new Exception("PlatformOptions is null.");
         public IGameHookDriver GetDriver() => Driver ?? throw new Exception("Driver is null.");
+        public Mapper GetMapper() => Mapper ?? throw new Exception("Mapper is null.");
 
         public void ResetState()
         {
