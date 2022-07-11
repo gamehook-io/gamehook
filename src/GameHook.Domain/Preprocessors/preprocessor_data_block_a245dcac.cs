@@ -1,9 +1,18 @@
-﻿namespace GameHook.Domain.Preprocessors
+﻿using GameHook.Domain.ValueTransformers;
+
+namespace GameHook.Domain.Preprocessors
 {
     public class DataBlock_a245dcac
     {
+        public MemoryAddress Address { get; init; }
         public int[] SubstructureOrdering { get; init; } = new int[0];
         public byte[] DecryptedData { get; init; } = new byte[0];
+    }
+
+    public class DataBlock_a245dcac_PropertyResult
+    {
+        public MemoryAddress Address { get; init; }
+        public byte[] Bytes { get; init; } = new byte[0];
     }
 
     public static partial class Preprocessors
@@ -11,20 +20,12 @@
         // Used beforehand to cache the data block.
         public static DataBlock_a245dcac decrypt_data_block_a245dcac(IEnumerable<MemoryAddressBlockResult> blocks, uint startingAddress)
         {
+            // Starting Address is the start of the P data structure.
             var wramBlock = blocks.GetResultWithinRange(startingAddress);
+            var pStructure = wramBlock.GetRelativeAddress(startingAddress, 48 + 32);
 
-            var structureStartingAddress = (int)(startingAddress - wramBlock.StartingAddress - 48);
-            var structureEndingAddress = structureStartingAddress + 48;
-
-            var dataBlock = wramBlock.Data[structureStartingAddress..structureEndingAddress];
-
-            var personalityValueBytes = new byte[8];
-            var originalTrainerIdBytes = new byte[8];
-            Array.Copy(dataBlock[0..3], personalityValueBytes, 3);
-            Array.Copy(dataBlock[4..7], originalTrainerIdBytes, 3);
-
-            var personalityValue = BitConverter.ToInt32(personalityValueBytes);
-            var originalTrainerId = BitConverter.ToInt32(originalTrainerIdBytes);
+            var personalityValue = UnsignedIntegerTransformer.ToValue(wramBlock.GetRelativeAddress(startingAddress, 4));
+            var originalTrainerId = UnsignedIntegerTransformer.ToValue(wramBlock.GetRelativeAddress(startingAddress + 4, 4));
 
             // The order of the structures is determined by the personality value of the Pokémon modulo 24,
             // as shown below, where G, A, E, and M stand for the substructures growth, attacks, EVs and condition, and miscellaneous, respectively.
@@ -62,21 +63,33 @@
             // To obtain the 32-bit decryption key, the entire Original Trainer ID number must be XORed with the personality value of the entry.
             var decryptionKey = originalTrainerId ^ personalityValue;
 
-            // This key can then be used to decrypt the data by XORing it, 32 bits (or 4 bytes) at a time.
-            var decryptedByteArray = (byte[])dataBlock.Clone();
+            // This key can then be used to decrypt the encrypted data block (starting at offset 32)
+            // by XORing it, 32 bits (or 4 bytes) at a time.
+            var decryptedByteArray = pStructure
+                .Skip(32).Chunk(4)
+                .SelectMany(x => UnsignedIntegerTransformer.FromValue(UnsignedIntegerTransformer.ToValue(x) ^ decryptionKey))
+                .ToArray();
 
             // Return the byte array decrypted.
             return new DataBlock_a245dcac()
             {
+                Address = startingAddress,
                 SubstructureOrdering = substructureOrder,
                 DecryptedData = decryptedByteArray
             };
         }
 
-        public static byte[] data_block_a245dcac(int structureIndex, int offset, Dictionary<int, byte[]> decryptedDataBlock)
+        public static DataBlock_a245dcac_PropertyResult data_block_a245dcac(int structureIndex, int offset, int size, DataBlock_a245dcac decryptedDataBlock)
         {
-            var structure = decryptedDataBlock[21];
-            return structure[offset..32];
+            var structurePositionForProperty = decryptedDataBlock.SubstructureOrdering[structureIndex];
+            var propertyStartingOffset = (structurePositionForProperty * 12) + offset;
+            var propertyEndingOffset = propertyStartingOffset + size;
+
+            return new DataBlock_a245dcac_PropertyResult()
+            {
+                Address = (MemoryAddress)(decryptedDataBlock.Address + propertyStartingOffset),
+                Bytes = decryptedDataBlock.DecryptedData[propertyStartingOffset..propertyEndingOffset]
+            };
         }
     }
 }

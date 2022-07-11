@@ -51,5 +51,27 @@ namespace GameHook.Domain
             return blocks.SingleOrDefault(x => address > x.StartingAddress && address < x.EndingAddress) ??
                 throw new Exception($"Cannot GetResultWithinRange for address {address}.");
         }
+
+        public static byte[] GetRelativeAddress(this MemoryAddressBlockResult block, MemoryAddress memoryAddress, int length)
+        {
+            var startingOffset = (int)(memoryAddress - block.StartingAddress);
+            var endingOffset = startingOffset + length;
+
+            return block.Data[startingOffset..endingOffset];
+        }
+
+        public static int GetIntParameterFromFunctionString(this string function, int position)
+        {
+            return int.Parse(function.Between("(", ")").Split(",")[position]);
+        }
+
+        public static string Between(this string str, string firstString, string lastString)
+        {
+            string FinalString;
+            int Pos1 = str.IndexOf(firstString) + firstString.Length;
+            int Pos2 = str.IndexOf(lastString);
+            FinalString = str.Substring(Pos1, Pos2 - Pos1);
+            return FinalString;
+        }
     }
 }

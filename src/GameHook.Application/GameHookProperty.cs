@@ -1,4 +1,5 @@
 ﻿using GameHook.Domain;
+using GameHook.Domain.Preprocessors;
 using GameHook.Domain.ValueTransformers;
 
 namespace GameHook.Application
@@ -80,19 +81,15 @@ namespace GameHook.Application
             if (MapperVariables.Preprocessor != null && MapperVariables.Preprocessor.Contains("data_block_a245dcac"))
             {
                 var baseAddress = MapperVariables.Address ?? throw new Exception($"Property {Path} does not have a base address.");
-                var substructureOrdering = preprocessorCache.data_block_a245dcac?[MapperVariables.Address ?? 0].SubstructureOrdering
-                    ?? throw new Exception($"Unable to determine substructure order for {Path} at address {MapperVariables.Address}.");
+                var decryptedDataBlock = preprocessorCache.data_block_a245dcac?[baseAddress] ?? throw new Exception($"Unable to retrieve data_block_a245dcac for property {Path} and address {Address}.");
 
-                // Do regex.
-                // \((\d+),(\d+)\)
-                var substructureOrder = 0;
-                var offsetStart = 0;
-                var offsetEnd = offsetStart + MapperVariables.Size;
+                var structureIndex = MapperVariables.Preprocessor.GetIntParameterFromFunctionString(0);
+                var offset = MapperVariables.Preprocessor.GetIntParameterFromFunctionString(1);
 
-                var propertyBlockOrder = substructureOrdering[substructureOrder];
+                var preprocessorResult = Preprocessors.data_block_a245dcac(structureIndex, offset, MapperVariables.Size, decryptedDataBlock);
 
-                address = 0;// baseAddress + (propertyBlockOrder * 13) + offsetStart);
-                bytes = preprocessorCache.data_block_a245dcac[baseAddress].DecryptedData[offsetStart..offsetEnd];
+                address = preprocessorResult.Address;
+                bytes = preprocessorResult.Bytes;
             }
             else if (MapperVariables.Address != null)
             {
