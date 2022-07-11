@@ -32,7 +32,7 @@ namespace GameHook.Application
 
     record MacroPointer
     {
-        public uint Address { get; set; }
+        public MemoryAddress Address { get; set; }
     }
 
     public static class MapperFactory
@@ -173,13 +173,13 @@ namespace GameHook.Application
             var preprocessor = source.ContainsKey("preprocessor") ? source["preprocessor"].ToString() : null;
             var expression = source.ContainsKey("expression") ? source["expression"].ToString() : null;
 
-            long address;
+            MemoryAddress address;
             if (macroPointer != null)
             {
                 if (source.ContainsKey("offset") == false || string.IsNullOrEmpty(source["offset"].ToString()))
                     throw new Exception($"Property {key} is missing a required field: offset.");
 
-                address = macroPointer.Address + offset ?? 0;
+                address = (MemoryAddress)(macroPointer.Address + (offset ?? 0));
             }
             else
             {
@@ -202,7 +202,7 @@ namespace GameHook.Application
 
                     Preprocessor = preprocessor,
                     Type = type,
-                    Address = (MemoryAddress)address,
+                    Address = address,
                     Size = size,
                     Position = position,
                     Reference = reference,

@@ -154,7 +154,7 @@ namespace GameHook.Application
 
             if (dataBlock_a245dcac_Properties != null)
             {
-                preprocessorCache.data_block_a245dcac = new Dictionary<uint, DataBlock_a245dcac>();
+                preprocessorCache.data_block_a245dcac = new Dictionary<MemoryAddress, DataBlock_a245dcac>();
 
                 // Key is the starting memory address block.
                 dataBlock_a245dcac_Properties.ForEach(x =>

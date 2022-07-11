@@ -8,7 +8,7 @@ namespace GameHook.Application
         public string Path { get; init; } = string.Empty;
 
         public string Type { get; init; } = string.Empty;
-        public uint? Address { get; init; }
+        public MemoryAddress? Address { get; init; }
         public int Size { get; init; } = 1;
         public int? Position { get; init; }
         public string? Reference { get; init; }
@@ -79,8 +79,20 @@ namespace GameHook.Application
             // Preprocessors.
             if (MapperVariables.Preprocessor != null && MapperVariables.Preprocessor.Contains("data_block_a245dcac"))
             {
-                address = MapperVariables.Address;
-                bytes = new byte[5] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+                var baseAddress = MapperVariables.Address ?? throw new Exception($"Property {Path} does not have a base address.");
+                var substructureOrdering = preprocessorCache.data_block_a245dcac?[MapperVariables.Address ?? 0].SubstructureOrdering
+                    ?? throw new Exception($"Unable to determine substructure order for {Path} at address {MapperVariables.Address}.");
+
+                // Do regex.
+                // \((\d+),(\d+)\)
+                var substructureOrder = 0;
+                var offsetStart = 0;
+                var offsetEnd = offsetStart + MapperVariables.Size;
+
+                var propertyBlockOrder = substructureOrdering[substructureOrder];
+
+                address = 0;// baseAddress + (propertyBlockOrder * 13) + offsetStart);
+                bytes = preprocessorCache.data_block_a245dcac[baseAddress].DecryptedData[offsetStart..offsetEnd];
             }
             else if (MapperVariables.Address != null)
             {
