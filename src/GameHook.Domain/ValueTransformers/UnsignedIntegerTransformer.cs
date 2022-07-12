@@ -7,17 +7,17 @@
             return BitConverter.GetBytes(value);
         }
 
-        public static uint ToValue(byte[] data, bool FLIP_THOSE_BYTES = false)
+        public static uint ToValue(byte[] passedInData, bool reverseBytes = false)
         {
-            byte[] toValueData = (byte[])data.Clone();
+            byte[] data = (byte[])passedInData.Clone();
 
-            if (FLIP_THOSE_BYTES)
+            if (reverseBytes)
             {
-                Array.Reverse(toValueData);
+                Array.Reverse(data);
             }
 
             byte[] value = new byte[8];
-            Array.Copy(toValueData, value, data.Length);
+            Array.Copy(data, value, data.Length);
 
             return BitConverter.ToUInt32(value, 0);
         }

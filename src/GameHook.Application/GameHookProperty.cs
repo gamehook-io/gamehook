@@ -118,11 +118,6 @@ namespace GameHook.Application
             Address = address;
             Bytes = bytes;
 
-            // TODO: HACK: Reverse the endian-ness for certain types.
-            var bytes2 = (byte[]) bytes.Clone();
-            if (GameHookInstance.GetPlatformOptions().EndianType == EndianTypes.BigEndian)
-                Array.Reverse(bytes2);
-
             // Fast path - if the bytes match, then we can assume the property has not been
             // updated since last poll.
             if (bytes != null && oldBytes != null && bytes.SequenceEqual(oldBytes) == true)
@@ -130,16 +125,25 @@ namespace GameHook.Application
                 return new GameHookPropertyProcessResult() { PropertyUpdated = false };
             }
 
+            // Little Endian has the least signifant byte first, so we need to reverse the byte array
+            // when translating it to a value.
+            var reverseBytes = GameHookInstance.PlatformOptions?.EndianType == EndianTypes.LittleEndian;
+
+            if (bytes == null)
+            {
+                throw new Exception($"Unable to calculate bytes for property '{Path}'");
+            }
+
             object? value = Type switch
             {
                 "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
-                "bitArray" => BitFieldTransformer.ToValue(bytes2),
-                "bit" => BitTransformer.ToValue(bytes2, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
-                "bool" => BooleanTransformer.ToValue(bytes2),
-                "int" => IntegerTransformer.ToValue(bytes2),
-                "reference" => ReferenceTransformer.ToValue(bytes2, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
+                "bitArray" => BitFieldTransformer.ToValue(bytes),
+                "bit" => BitTransformer.ToValue(bytes, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
+                "bool" => BooleanTransformer.ToValue(bytes),
+                "int" => IntegerTransformer.ToValue(bytes, reverseBytes),
+                "reference" => ReferenceTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
                 "string" => StringTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
-                "uint" => UnsignedIntegerTransformer.ToValue(bytes2),
+                "uint" => UnsignedIntegerTransformer.ToValue(bytes),
                 _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
             };
 
