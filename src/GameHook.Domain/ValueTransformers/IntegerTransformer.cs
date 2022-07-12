@@ -7,17 +7,11 @@
             return BitConverter.GetBytes(value);
         }
 
-        public static int ToValue(byte[] data, bool reverseBytes)
+        public static int ToValue(byte[] data)
         {
-            byte[] clonedData = (byte[])data.Clone();
-
-            if (reverseBytes)
-            {
-                Array.Reverse(clonedData);
-            }
-
+            // Integers cannot currently exceed int32
             byte[] value = new byte[8];
-            Array.Copy(clonedData, value, data.Length);
+            Array.Copy(data, value, data.Length);
 
             return BitConverter.ToInt32(value, 0);
         }

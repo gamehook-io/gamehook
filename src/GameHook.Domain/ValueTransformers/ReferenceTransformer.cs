@@ -4,13 +4,7 @@
     {
         public static GlossaryItem? SingleOrDefaultByKey(this IEnumerable<GlossaryItem> glossaryItems, byte[] bytes)
         {
-            // Translate the byte array into references using
-            // the dictionary passed in.
-            byte[] value = new byte[8];
-            Array.Copy(bytes.Reverse().ToArray(), value, bytes.Length);
-
-            var convertedValue = BitConverter.ToUInt32(value, 0);
-
+            var convertedValue = UnsignedIntegerTransformer.ToValue(bytes);
             return glossaryItems.SingleOrDefault(x => x.Key == convertedValue);
         }
 

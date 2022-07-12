@@ -134,16 +134,22 @@ namespace GameHook.Application
                 throw new Exception($"Unable to calculate bytes for property '{Path}'");
             }
 
+            // Little Endian has the least signifant byte first, so we need to reverse the byte array
+            // when translating it to a value.
+            var workingBytes = (byte[]) bytes.Clone();
+            if (reverseBytes)
+                 Array.Reverse(workingBytes);
+
             object? value = Type switch
             {
                 "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
                 "bitArray" => BitFieldTransformer.ToValue(bytes),
                 "bit" => BitTransformer.ToValue(bytes, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
                 "bool" => BooleanTransformer.ToValue(bytes),
-                "int" => IntegerTransformer.ToValue(bytes, reverseBytes),
-                "reference" => ReferenceTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
+                "int" => IntegerTransformer.ToValue(workingBytes),
+                "reference" => ReferenceTransformer.ToValue(workingBytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
                 "string" => StringTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
-                "uint" => UnsignedIntegerTransformer.ToValue(bytes),
+                "uint" => UnsignedIntegerTransformer.ToValue(workingBytes),
                 _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
             };
 

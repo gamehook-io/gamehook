@@ -25,7 +25,7 @@ namespace GameHook.Application
 
     public class GB_PlatformOptions : IPlatformOptions
     {
-        public EndianTypes EndianType { get; } = EndianTypes.BigEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.LittleEndian;
 
         public MemoryAddressBlock[] Ranges { get; } = new List<MemoryAddressBlock>()
         {
@@ -42,7 +42,7 @@ namespace GameHook.Application
 
     public class GBA_PlatformOptions : IPlatformOptions
     {
-        public EndianTypes EndianType { get; } = EndianTypes.LittleEndian;
+        public EndianTypes EndianType { get; } = EndianTypes.BigEndian;
 
         public MemoryAddressBlock[] Ranges { get; } = new List<MemoryAddressBlock>()
         {
