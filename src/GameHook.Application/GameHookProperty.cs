@@ -56,19 +56,6 @@ namespace GameHook.Application
             }
         }
 
-        private static MemoryAddressBlock? GetBlockForAddress(MemoryAddress address, IEnumerable<MemoryAddressBlock> ranges)
-        {
-            foreach (var range in ranges)
-            {
-                if (address >= range.StartingAddress && address <= range.EndingAddress)
-                {
-                    return range;
-                }
-            }
-
-            return null;
-        }
-
         public async Task<GameHookPropertyProcessResult> Process(IEnumerable<MemoryAddressBlockResult> driverResult, PreprocessorCache preprocessorCache)
         {
             byte[]? oldBytes = Bytes;
@@ -96,12 +83,7 @@ namespace GameHook.Application
                 // Calculate the bytes from the driver range and address property.
                 address = MapperVariables.Address;
 
-                var block = GetBlockForAddress((uint)address, GameHookInstance.GetPlatformOptions().Ranges);
-                if (block != null)
-                {
-                    var offsetaddress = address - block.StartingAddress;
-                    bytes = driverResult.GetResultWithinRange(address ?? 0).Data.Skip((int)offsetaddress).Take(Size).ToArray();
-                }
+                bytes = driverResult.GetAddress(MapperVariables.Address.Value, MapperVariables.Size);
             }
 
             // Once preprocessors are ran, we can begin finding the value.
@@ -112,7 +94,7 @@ namespace GameHook.Application
 
             if (bytes == null)
             {
-                throw new Exception($"Unable to calculate bytes for property '{Path}'");
+                throw new Exception($"Unable to obtain bytes for property '{Path}' at address {address.Value.ToHexdecimalString()}");
             }
 
             Address = address;
@@ -125,20 +107,20 @@ namespace GameHook.Application
                 return new GameHookPropertyProcessResult() { PropertyUpdated = false };
             }
 
+            if (bytes == null)
+            {
+                throw new Exception($"Unable to obtain bytes for property '{Path}'");
+            }
+
+            var workingBytes = bytes;
+
             // Little Endian has the least signifant byte first, so we need to reverse the byte array
             // when translating it to a value.
             var reverseBytes = GameHookInstance.PlatformOptions?.EndianType == EndianTypes.LittleEndian;
 
-            if (bytes == null)
-            {
-                throw new Exception($"Unable to calculate bytes for property '{Path}'");
-            }
-
             // Little Endian has the least signifant byte first, so we need to reverse the byte array
             // when translating it to a value.
-            var workingBytes = (byte[]) bytes.Clone();
-            if (reverseBytes)
-                 Array.Reverse(workingBytes);
+            if (bytes.Length > 1 && reverseBytes) Array.Reverse(workingBytes);
 
             object? value = Type switch
             {

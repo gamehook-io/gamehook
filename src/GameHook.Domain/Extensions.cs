@@ -46,10 +46,9 @@ namespace GameHook.Domain
             return data.Skip((int)skip).Take(take).ToArray();
         }
 
-        public static MemoryAddressBlockResult GetResultWithinRange(this IEnumerable<MemoryAddressBlockResult> blocks, uint address)
+        public static MemoryAddressBlockResult? GetResultWithinRange(this IEnumerable<MemoryAddressBlockResult> blocks, uint address)
         {
-            return blocks.SingleOrDefault(x => address > x.StartingAddress && address < x.EndingAddress) ??
-                throw new Exception($"Cannot GetResultWithinRange for address {address}.");
+            return blocks.SingleOrDefault(x => address > x.StartingAddress && address < x.EndingAddress);
         }
 
         public static byte[] GetRelativeAddress(this MemoryAddressBlockResult block, MemoryAddress memoryAddress, int length)
@@ -58,6 +57,11 @@ namespace GameHook.Domain
             var endingOffset = startingOffset + length;
 
             return block.Data[startingOffset..endingOffset];
+        }
+
+        public static byte[]? GetAddress(this IEnumerable<MemoryAddressBlockResult> blocks, uint address, int length)
+        {
+            return GetResultWithinRange(blocks, address)?.GetRelativeAddress(address, length);
         }
 
         public static int GetIntParameterFromFunctionString(this string function, int position)
