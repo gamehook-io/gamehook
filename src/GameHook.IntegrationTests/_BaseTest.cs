@@ -90,7 +90,7 @@ namespace GameHook.IntegrationTests
         {
             await GameHookClient.ChangeMapperAsync(new MapperReplaceModel()
             {
-                Id = "f1d8eef971124ba57ef5523b85fc6c99"
+                Id = "ff4d0e23c73b21068ef1f5deffb6b6ea"
             });
         }
     }
