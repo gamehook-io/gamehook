@@ -153,7 +153,7 @@ namespace GameHook.Application
 
             if (Value != value)
             {
-                result.FieldsChanged.Add("bytes");
+                result.FieldsChanged.Add("value");
             }
 
             Address = address;
@@ -164,7 +164,7 @@ namespace GameHook.Application
             {
                 foreach (var notifier in GameHookInstance.ClientNotifiers)
                 {
-                    await notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, result.FieldsChanged.ToArray());
+                    _= notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, result.FieldsChanged.ToArray());
                 }
             }
 

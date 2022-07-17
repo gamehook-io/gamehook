@@ -220,6 +220,7 @@ class GameHookMapperClient {
 
                 // If they need to know about other fields changing,
                 // they can register to the global GameHook event handler.
+
                 if (fieldsChanged.includes('value')) {
                     // Trigger the property.change events if any.
                     const changeArray = that._change[property.path]

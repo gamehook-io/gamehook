@@ -50,6 +50,7 @@ namespace GameHook.Application
         public Mapper? Mapper { get; private set; }
         public IPlatformOptions? PlatformOptions { get; private set; }
         public IEnumerable<MemoryAddressBlock>? BlocksToRead { get; private set; }
+        public const int DELAY_MS_BETWEEN_READS = 25;
 
         public GameHookInstance(ILogger<GameHookInstance> logger, IMapperFilesystemProvider provider, IEnumerable<IClientNotifier> clientNotifiers)
         {
@@ -129,7 +130,7 @@ namespace GameHook.Application
             while (ReadLoopToken != null && ReadLoopToken.IsCancellationRequested == false)
             {
                 await Read();
-                await Task.Delay(1);
+                await Task.Delay(DELAY_MS_BETWEEN_READS);
             }
         }
 

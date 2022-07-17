@@ -24,26 +24,9 @@ namespace GameHook.Domain
             return value;
         }
 
-        public static async Task<int> IncrementCondition(this int value, int maximumValueAllowed, Func<Task> executeAsync)
-        {
-            value++;
-
-            if (value > maximumValueAllowed)
-            {
-                await executeAsync();
-            }
-
-            return value;
-        }
-
         public static bool Between(this uint value, uint min, uint max)
         {
             return value >= min && value <= max;
-        }
-
-        public static byte[] Get(this byte[] data, uint skip, int take)
-        {
-            return data.Skip((int)skip).Take(take).ToArray();
         }
 
         public static MemoryAddressBlockResult? GetResultWithinRange(this IEnumerable<MemoryAddressBlockResult> blocks, uint address)
