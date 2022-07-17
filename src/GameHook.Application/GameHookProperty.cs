@@ -63,7 +63,6 @@ namespace GameHook.Application
 
             uint? address = null;
             byte[]? bytes = null;
-            object? value = null;
 
             // Preprocessors.
             if (MapperVariables.Preprocessor != null && MapperVariables.Preprocessor.Contains("data_block_a245dcac"))
@@ -83,19 +82,18 @@ namespace GameHook.Application
             {
                 // Calculate the bytes from the driver range and address property.
                 address = MapperVariables.Address;
-
                 bytes = driverResult.GetAddress(MapperVariables.Address.Value, MapperVariables.Size);
             }
 
             // Once preprocessors are ran, we can begin finding the value.
             if (address == null)
             {
-                throw new Exception($"Unable to calculate address for property '{Path}'");
+                throw new Exception($"Unable to retrieve address for property '{Path}'");
             }
 
             if (bytes == null)
             {
-                throw new Exception($"Unable to obtain bytes for property '{Path}' at address {address.Value.ToHexdecimalString()}");
+                throw new Exception($"Unable to retrieve bytes for property '{Path}' at address {address.Value.ToHexdecimalString()}. Is the address within the drivers' memory address block ranges?");
             }
 
             // Determine if we need to reset a frozen property.
@@ -106,6 +104,7 @@ namespace GameHook.Application
                 return result;
             }
 
+            object? value;
             if (Address == address && Bytes?.SequenceEqual(bytes) == true)
             {
                 // Fast path - if the bytes match, then we can assume the property has not been
