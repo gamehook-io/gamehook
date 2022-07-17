@@ -214,7 +214,8 @@ class GameHookMapperClient {
 
                 // Only trigger the property's change events when
                 // the value has changed.
-                // This is functionally different, but users are really
+
+                // This is functionally 'weird', but users are really
                 // only interested in when the value changed.
 
                 // If they need to know about other fields changing,
