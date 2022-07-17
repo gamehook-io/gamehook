@@ -73,9 +73,12 @@ namespace GameHook.Domain.Drivers
 
                         await Task.Delay(DELAY_BETWEEN_RECEIVE_MS);
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        throw new DriverDisconnectedException(null, ex);
+                        // Automatically swallow exceptions here because
+                        // they're not useful even if there's an error.
+
+                        // We don't want to spam the user with errors.
                     }
                 }
             });
