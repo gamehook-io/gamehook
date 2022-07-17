@@ -21,7 +21,7 @@ namespace GameHook.Application
 
     public class GameHookPropertyProcessResult
     {
-        public bool PropertyUpdated { get; init; }
+        public List<string> FieldsChanged { get; init; } = new List<string>();
     }
 
     public class GameHookProperty
@@ -58,11 +58,11 @@ namespace GameHook.Application
 
         public async Task<GameHookPropertyProcessResult> Process(IEnumerable<MemoryAddressBlockResult> driverResult, PreprocessorCache preprocessorCache)
         {
-            byte[]? oldBytes = Bytes;
-            object? oldValue = Value;
+            var result = new GameHookPropertyProcessResult();
 
             uint? address = null;
             byte[]? bytes = null;
+            object? value = null;
 
             // Preprocessors.
             if (MapperVariables.Preprocessor != null && MapperVariables.Preprocessor.Contains("data_block_a245dcac"))
@@ -97,64 +97,77 @@ namespace GameHook.Application
                 throw new Exception($"Unable to obtain bytes for property '{Path}' at address {address.Value.ToHexdecimalString()}");
             }
 
-            Address = address;
-            Bytes = bytes;
-
-            // Fast path - if the bytes match, then we can assume the property has not been
-            // updated since last poll.
-            if (bytes != null && oldBytes != null && bytes.SequenceEqual(oldBytes) == true)
+            // Determine if we need to reset a frozen property.
+            // If this is the case, return early.
+            if (bytes != Bytes && IsFrozen)
             {
-                return new GameHookPropertyProcessResult() { PropertyUpdated = false };
+                await GameHookInstance.GetDriver().WriteBytes(address ?? 0, BytesFrozen ?? throw new Exception("Attempted to force a frozen bytes, but BytesFrozen was NULL."));
+                return result;
             }
 
-            if (bytes == null)
+            if (Address == address && Bytes?.SequenceEqual(bytes) == true)
             {
-                throw new Exception($"Unable to obtain bytes for property '{Path}'");
-            }
+                // Fast path - if the bytes match, then we can assume the property has not been
+                // updated since last poll.
 
-            var workingBytes = bytes;
+                // Do nothing, we don't need to calculate the new value as
+                // the bytes are the same.
 
-            // Little Endian has the least signifant byte first, so we need to reverse the byte array
-            // when translating it to a value.
-            var reverseBytes = GameHookInstance.PlatformOptions?.EndianType == EndianTypes.LittleEndian;
-
-            // Little Endian has the least signifant byte first, so we need to reverse the byte array
-            // when translating it to a value.
-            if (bytes.Length > 1 && reverseBytes) Array.Reverse(workingBytes);
-
-            object? value = Type switch
-            {
-                "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
-                "bitArray" => BitFieldTransformer.ToValue(bytes),
-                "bit" => BitTransformer.ToValue(bytes, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
-                "bool" => BooleanTransformer.ToValue(bytes),
-                "int" => IntegerTransformer.ToValue(workingBytes),
-                "reference" => ReferenceTransformer.ToValue(workingBytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
-                "string" => StringTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
-                "uint" => UnsignedIntegerTransformer.ToValue(workingBytes),
-                _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
-            };
-
-            Value = value;
-
-            if (value != oldValue)
-            {
-                if (IsFrozen)
-                {
-                    await GameHookInstance.GetDriver().WriteBytes(address ?? 0, BytesFrozen ?? throw new Exception("Attempted to force a frozen bytes, but BytesFrozen was NULL."));
-                }
-
-                foreach (var notifier in GameHookInstance.ClientNotifiers)
-                {
-                    await notifier.SendPropertyChanged(Path, Value, Bytes, IsFrozen);
-                }
-
-                return new GameHookPropertyProcessResult() { PropertyUpdated = true };
+                value = Value;
             }
             else
             {
-                return new GameHookPropertyProcessResult() { PropertyUpdated = false };
+                var workingBytes = bytes;
+
+                // Little Endian has the least signifant byte first, so we need to reverse the byte array
+                // when translating it to a value.
+                var reverseBytes = GameHookInstance.PlatformOptions?.EndianType == EndianTypes.LittleEndian;
+
+                // Little Endian has the least signifant byte first, so we need to reverse the byte array
+                // when translating it to a value.
+                if (bytes.Length > 1 && reverseBytes) Array.Reverse(workingBytes);
+
+                value = Type switch
+                {
+                    "binaryCodedDecimal" => BinaryCodedDecimalTransformer.ToValue(bytes),
+                    "bitArray" => BitFieldTransformer.ToValue(bytes),
+                    "bit" => BitTransformer.ToValue(bytes, MapperVariables.Position ?? throw new Exception("Missing property variable: Position")),
+                    "bool" => BooleanTransformer.ToValue(bytes),
+                    "int" => IntegerTransformer.ToValue(workingBytes),
+                    "reference" => ReferenceTransformer.ToValue(workingBytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? throw new Exception("Missing property variable: reference")]),
+                    "string" => StringTransformer.ToValue(bytes, GameHookInstance.GetMapper().Glossary[MapperVariables.Reference ?? "defaultCharacterMap"]),
+                    "uint" => UnsignedIntegerTransformer.ToValue(workingBytes),
+                    _ => throw new Exception($"Unknown type defined for {Path}, {Type}")
+                };
             }
+
+            if (Address != address)
+            {
+                result.FieldsChanged.Add("address");
+                Address = address;
+            }
+
+            if (Bytes != bytes)
+            {
+                result.FieldsChanged.Add("bytes");
+                Bytes = bytes;
+            }
+
+            if (Value != value)
+            {
+                result.FieldsChanged.Add("bytes");
+                Value = value;
+            }
+
+            if (result.FieldsChanged.Count > 0)
+            {
+                foreach (var notifier in GameHookInstance.ClientNotifiers)
+                {
+                    await notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, result.FieldsChanged.ToArray());
+                }
+            }
+
+            return result;
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
@@ -175,6 +188,8 @@ namespace GameHook.Application
                 throw new Exception($"Property '{Path}' address is NULL.");
             }
 
+            await GameHookInstance.GetDriver().WriteBytes((uint)Address, bytes);
+
             if (freeze == true)
             {
                 await FreezeProperty(bytes);
@@ -183,8 +198,6 @@ namespace GameHook.Application
             {
                 await UnfreezeProperty();
             }
-
-            await GameHookInstance.GetDriver().WriteBytes((uint)Address, bytes);
         }
 
         public async Task FreezeProperty(byte[] bytesFrozen)
@@ -193,7 +206,7 @@ namespace GameHook.Application
 
             foreach (var notifier in GameHookInstance.ClientNotifiers)
             {
-                await notifier.SendPropertyFrozen(Path);
+                await notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, new string[] { "frozen" });
             }
         }
 
@@ -203,7 +216,7 @@ namespace GameHook.Application
 
             foreach (var notifier in GameHookInstance.ClientNotifiers)
             {
-                await notifier.SendPropertyUnfrozen(Path);
+                await notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, new string[] { "frozen" });
             }
         }
 

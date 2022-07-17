@@ -169,15 +169,7 @@ namespace GameHook.Application
             {
                 try
                 {
-                    var result = await x.Process(driverResult, preprocessorCache);
-
-                    if (result.PropertyUpdated)
-                    {
-                        foreach (var notifier in ClientNotifiers)
-                        {
-                            await notifier.SendPropertyChanged(x.Path, x.Value, x.Bytes, x.IsFrozen);
-                        }
-                    }
+                    await x.Process(driverResult, preprocessorCache);
                 }
                 catch (Exception)
                 {

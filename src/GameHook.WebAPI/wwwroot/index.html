@@ -173,7 +173,7 @@
                                 </tr>
                                 <tr>
                                     <td>Address</td>
-                                    <td>0x{{ integerToHexdecimalString(editingProperty.property.address).replace(' ', '') }}</td>
+                                    <td>0x{{ decimalToHexdecimal(editingProperty.property.address) }}</td>
                                 </tr>
                                 <tr>
                                     <td>Size</td>
@@ -389,7 +389,7 @@
                     }
                 },
                 onBlur(event, index) {
-                    const valueInteger = GameHookMapperClient.hexdecimalStringToInteger(event.target.value)
+                    const valueInteger = GameHookMapperClient.hexdecimalToDecimal(event.target.value)
 
                     this.editingProperty.bytes[index] = valueInteger
                 }
@@ -512,7 +512,7 @@
                 this.loadData()
             },
             methods: {
-                integerToHexdecimalString: GameHookMapperClient.integerToHexdecimalString,
+                decimalToHexdecimal: GameHookMapperClient.decimalToHexdecimal,
 
                 displayBytes: function (bytes, forceMode) {
                     const mode = forceMode ?? this.userSettings.displayBytesMode
@@ -520,9 +520,9 @@
                     if (mode === 'decimal') {
                         return bytes.join(' ')
                     } else if (mode === 'hexdecimalLower') {
-                        return bytes.map(x => GameHookMapperClient.integerToHexdecimalString(x, false)).join(' ')
+                        return bytes.map(x => GameHookMapperClient.decimalToHexdecimal(x, false)).join(' ')
                     } else if (mode === 'hexdecimalUpper') {
-                        return bytes.map(x => GameHookMapperClient.integerToHexdecimalString(x, true)).join(' ')
+                        return bytes.map(x => GameHookMapperClient.decimalToHexdecimal(x, true)).join(' ')
                     } else {
                         throw new Error(`Invalid user setting found for displayBytesMode: ${mode}.`)
                     }

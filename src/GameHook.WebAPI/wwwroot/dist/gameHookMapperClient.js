@@ -63,7 +63,7 @@ class GameHookMapperClient {
     _change = []
     _once = []
 
-    static integerToHexdecimalString(x, uppercase = true) {
+    static decimalToHexdecimal(x, uppercase = true) {
         if (x == null) return null
 
         let stringValue = x.toString(16)
@@ -74,17 +74,13 @@ class GameHookMapperClient {
             stringValue = '0' + stringValue
         }
 
-        // Add a space after every 2 characters.
-        stringValue = stringValue.replace(/.{1,2}(?=(.{2})+$)/g, '$& ')
-
         if (uppercase) return stringValue.toUpperCase()
         else return stringValue
     }
 
-    static hexdecimalStringToInteger(x) {
+    static hexdecimalToDecimal(x) {
         if (x == null) return null
-
-        return parseInt(x.replace(' ', ''), 16)
+        return parseInt(x, 16)
     }
 
     constructor(connectionString = 'http://localhost:8085') {
@@ -201,7 +197,7 @@ class GameHookMapperClient {
             await this._establishConnection()
         })
 
-        this._signalrClient.on('PropertyChanged', (path, value, bytes, frozen) => {
+        this._signalrClient.on('PropertyChanged', (path, address, value, bytes, frozen, fieldsChanged) => {
             if (that._properties && that._properties.length > 0) {
                 let property = that._properties.find(x => x.path === path)
                 if (!property) {
@@ -211,26 +207,36 @@ class GameHookMapperClient {
 
                 let oldProperty = { value: property.value, bytes: property.bytes }
 
+                property.address = address
                 property.value = value
                 property.bytes = bytes
                 property.frozen = frozen
 
-                // Trigger the property.change events if any.
-                const changeArray = that._change[property.path]
-                if (changeArray && changeArray.length > 0) {
-                    changeArray.forEach(x => {
-                        x(property, oldProperty)
-                    })
-                }
+                // Only trigger the property's change events when
+                // the value has changed.
+                // This is functionally different, but users are really
+                // only interested in when the value changed.
 
-                // Trigger the property.once events if any.
-                const onceArray = that._once[property.path]
-                if (onceArray && onceArray.length > 0) {
-                    onceArray.forEach(x => {
-                        x(property, oldProperty)
-                    })
+                // If they need to know about other fields changing,
+                // they can register to the global GameHook event handler.
+                if (fieldsChanged.includes('value')) {
+                    // Trigger the property.change events if any.
+                    const changeArray = that._change[property.path]
+                    if (changeArray && changeArray.length > 0) {
+                        changeArray.forEach(x => {
+                            x(property, oldProperty)
+                        })
+                    }
 
-                    that._once[property.path] = []
+                    // Trigger the property.once events if any.
+                    const onceArray = that._once[property.path]
+                    if (onceArray && onceArray.length > 0) {
+                        onceArray.forEach(x => {
+                            x(property, oldProperty)
+                        })
+
+                        that._once[property.path] = []
+                    }
                 }
 
                 // Trigger the global property changed event.
@@ -239,54 +245,6 @@ class GameHookMapperClient {
                 }
             } else {
                 console.debug(`[GameHook Client] Mapper is not loaded, throwing away event. PropertyUpdated ${path} ${value} ${bytes} ${frozen}`)
-            }
-        })
-
-        this._signalrClient.on('PropertyFrozen', (path) => {
-            if (that._properties && that._properties.length > 0) {
-                let property = that._properties.find(x => x.path === path)
-                if (!property) {
-                    console.warn(`[GameHook Client] Could not find a related property in PropertyUpdated event for: ${path} ${value} ${bytes}`)
-                    return
-                }
-
-                property.frozen = true
-
-                // Trigger the property changed event.
-                if (property.onFrozen) {
-                    property.onFrozen(property)
-                }
-
-                // Trigger the global property changed event.
-                if (that.onPropertyFrozen) {
-                    that.onPropertyFrozen(property)
-                }
-            } else {
-                console.debug(`[GameHook Client] Mapper is not loaded, throwing away event. PropertyUpdated ${path} ${value} ${bytes}`)
-            }
-        })
-
-        this._signalrClient.on('PropertyUnfrozen', (path) => {
-            if (that._properties && that._properties.length > 0) {
-                let property = that._properties.find(x => x.path === path)
-                if (!property) {
-                    console.warn(`[GameHook Client] Could not find a related property in PropertyUpdated event for: ${path} ${value} ${bytes}`)
-                    return
-                }
-
-                property.frozen = false
-
-                // Trigger the property changed event.
-                if (property.onUnfrozen) {
-                    property.onUnfrozen(property)
-                }
-
-                // Trigger the global property changed event.
-                if (that.onPropertyUnfrozen) {
-                    that.onPropertyUnfrozen(property)
-                }
-            } else {
-                console.debug(`[GameHook Client] Mapper is not loaded, throwing away event. PropertyUpdated ${path} ${value} ${bytes}`)
             }
         })
 
@@ -350,6 +308,4 @@ class GameHookMapperClient {
     onMapperLoadError(err) { /* Override this with your own function. */ }
     onDriverError(err) { /* Override this with your own function. */ }
     onPropertyChanged(property) { /* Override this with your own function. */ }
-    onPropertyFrozen(property) { /* Override this with your own function. */ }
-    onPropertyUnfrozen(property) { /* Override this with your own function. */ }
 }
