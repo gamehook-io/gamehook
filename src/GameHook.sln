@@ -24,8 +24,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GameHook.IntegrationTests",
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GameHook.Utility.OffsetYml", "GameHook.Utility.OffsetYml\GameHook.Utility.OffsetYml.csproj", "{D3F22731-B70C-4936-9DAA-B397250EDBD8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameHookTesting", "GameHookTesting\GameHookTesting.csproj", "{CCC9E24F-B643-493E-9B9A-4627BE481E09}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -60,10 +58,6 @@ Global
 		{D3F22731-B70C-4936-9DAA-B397250EDBD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D3F22731-B70C-4936-9DAA-B397250EDBD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D3F22731-B70C-4936-9DAA-B397250EDBD8}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CCC9E24F-B643-493E-9B9A-4627BE481E09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CCC9E24F-B643-493E-9B9A-4627BE481E09}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CCC9E24F-B643-493E-9B9A-4627BE481E09}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CCC9E24F-B643-493E-9B9A-4627BE481E09}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -76,7 +70,6 @@ Global
 		{5CAB9559-88FF-4695-A4AF-B2172B54B0B8} = {273B00BF-3D40-4A1D-B38A-C707E0B79C8A}
 		{ED38E792-3262-4885-970E-CA4B0AC62265} = {E21E34D5-6D8F-4B4D-967F-795813D1FAD2}
 		{D3F22731-B70C-4936-9DAA-B397250EDBD8} = {273B00BF-3D40-4A1D-B38A-C707E0B79C8A}
-		{CCC9E24F-B643-493E-9B9A-4627BE481E09} = {273B00BF-3D40-4A1D-B38A-C707E0B79C8A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {856C15D5-5EB2-49C8-A5C3-7A81D3FC2D78}
