@@ -141,7 +141,7 @@ namespace GameHook.Application
                 };
             }
 
-            if (Address != address)
+            if (Address?.Equals(address) == false)
             {
                 result.FieldsChanged.Add("address");
             }
@@ -151,9 +151,20 @@ namespace GameHook.Application
                 result.FieldsChanged.Add("bytes");
             }
 
-            if (Value != value)
+            // Depending on the data type, we might need to compare values differently.
+            if (Type == "bitArray")
             {
-                result.FieldsChanged.Add("value");
+                if (Value != null && value != null && ((bool[])Value).SequenceEqual(((bool[])value)) == false)
+                {
+                    result.FieldsChanged.Add("value");
+                }
+            }
+            else
+            {
+                if (Value?.Equals(value) == false)
+                {
+                    result.FieldsChanged.Add("value");
+                }
             }
 
             Address = address;
@@ -164,7 +175,7 @@ namespace GameHook.Application
             {
                 foreach (var notifier in GameHookInstance.ClientNotifiers)
                 {
-                    _= notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, result.FieldsChanged.ToArray());
+                    _ = notifier.SendPropertyChanged(Path, Address, Value, Bytes, IsFrozen, result.FieldsChanged.ToArray());
                 }
             }
 
