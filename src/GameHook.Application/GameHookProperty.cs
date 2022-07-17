@@ -51,6 +51,7 @@ namespace GameHook.Application
             get
             {
                 if (Address == null) return true;
+                if (string.IsNullOrEmpty(MapperVariables.Preprocessor) == false) return true;
 
                 return false;
             }
