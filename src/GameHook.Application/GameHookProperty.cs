@@ -145,20 +145,21 @@ namespace GameHook.Application
             if (Address != address)
             {
                 result.FieldsChanged.Add("address");
-                Address = address;
             }
 
-            if (Bytes != bytes)
+            if (Bytes?.SequenceEqual(bytes) == false)
             {
                 result.FieldsChanged.Add("bytes");
-                Bytes = bytes;
             }
 
             if (Value != value)
             {
                 result.FieldsChanged.Add("bytes");
-                Value = value;
             }
+
+            Address = address;
+            Bytes = bytes;
+            Value = value;
 
             if (result.FieldsChanged.Count > 0)
             {

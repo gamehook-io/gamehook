@@ -205,8 +205,7 @@ class GameHookMapperClient {
                     return
                 }
 
-                console.info(`${path} changed. ${fieldsChanged}`)
-                let oldProperty = { value: property.value, bytes: property.bytes }
+                let oldProperty = { address: property.address, value: property.value, bytes: property.bytes, frozen: property.frozen }
 
                 property.address = address
                 property.value = value
