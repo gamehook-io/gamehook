@@ -21,13 +21,13 @@ namespace GameHook.Domain.Preprocessors
         public static DataBlock_a245dcac decrypt_data_block_a245dcac(IEnumerable<MemoryAddressBlockResult> blocks, uint startingAddress)
         {
             // Starting Address is the start of the P data structure.
-            var wramBlock = blocks.GetResultWithinRange(startingAddress);
-            var pStructure = wramBlock.GetRelativeAddress(startingAddress, 48 + 32);
+            var block = blocks.GetResultWithinRange(startingAddress) ?? throw new Exception($"Unable to retrieve memory block for address {startingAddress.ToHexdecimalString()}.");
+            var pStructure = block.GetRelativeAddress(startingAddress, 48 + 32);
 
-            var personalityValue = UnsignedIntegerTransformer.ToValue(wramBlock.GetRelativeAddress(startingAddress, 4));
-            var originalTrainerId = UnsignedIntegerTransformer.ToValue(wramBlock.GetRelativeAddress(startingAddress + 4, 4));
+            var personalityValue = UnsignedIntegerTransformer.ToValue(block.GetRelativeAddress(startingAddress, 4));
+            var originalTrainerId = UnsignedIntegerTransformer.ToValue(block.GetRelativeAddress(startingAddress + 4, 4));
 
-            // The order of the structures is determined by the personality value of the Pokémon modulo 24,
+            // The order of the structures is determined by the personality value of the P modulo 24,
             // as shown below, where G, A, E, and M stand for the substructures growth, attacks, EVs and condition, and miscellaneous, respectively.
             var substructureType = personalityValue % 24;
 
@@ -60,7 +60,7 @@ namespace GameHook.Domain.Preprocessors
                 _ => throw new Exception($"data_block_a245dcac returned a unknown substructure order given a personality value of {personalityValue} => {substructureType}.")
             };
 
-            // To obtain the 32-bit decryption key, the entire Original Trainer ID number must be XORed with the personality value of the entry.
+            // To obtain the 32-bit decryption key, the entire OTID number must be XORed with the personality value of the entry.
             var decryptionKey = originalTrainerId ^ personalityValue;
 
             // This key can then be used to decrypt the encrypted data block (starting at offset 32)
