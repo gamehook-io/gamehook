@@ -289,10 +289,13 @@
                     <StackPanel MaxWidth="640" Margin="20" Spacing="20" HorizontalAlignment="Stretch"
                                 VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                            <Image Source="/icon.png" Width="28" Height="28" />
+                            <Image Source="/icon.png" Width="64" Height="64" />
                             <TextBlock Text="Gamehook" FontSize="18" FontWeight="SemiBold"
                                        VerticalAlignment="Center" />
                         </StackPanel>
+                        <TextBlock Text="Gamehook is a debugging tool for reading and modifying emulator memory."
+                                   Classes="muted" FontSize="12" LineHeight="19" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,20" />
 
                         <StackPanel Spacing="7">
                             <TextBlock Text="DRIVER" Classes="eyebrow" />
@@ -336,7 +339,7 @@
                                 <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
                                         IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
                             </Grid>
-                            <TextBlock Text="Maps game memory to valid property fields." Classes="muted" FontSize="11" />
+                            <TextBlock Text="Maps game memory to human-readable properties." Classes="muted" FontSize="11" />
                         </StackPanel>
 
                         <Grid ColumnDefinitions="*,Auto">
