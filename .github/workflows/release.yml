@@ -164,15 +164,6 @@ jobs:
             --channel ${{ matrix.channel }} \
             --outputDir releases/${{ matrix.rid }}
 
-      # Velopack always names the Windows installer "<packId>-<channel>-Setup.exe" (no CLI option
-      # to override it) - rename it to the plain "Setup.exe" shown on the release page. Safe to
-      # rename: the auto-update feed only cares about the RELEASES file and .nupkg names, which
-      # this doesn't touch.
-      - name: Rename Windows installer to Setup.exe
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: mv "releases/${{ matrix.rid }}/Gamehook-${{ matrix.channel }}-Setup.exe" "releases/${{ matrix.rid }}/Setup.exe"
-
       - name: Smoke test Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         shell: bash
@@ -229,4 +220,18 @@ jobs:
             --merge true \
             --publish false
           done
+
+          # Velopack always names the Windows installer "<packId>-<channel>-Setup.exe" (no CLI
+          # option to override it, and `vpk upload github` itself requires that exact name to
+          # exist on disk - renaming the file beforehand just makes the upload fail). Rename it
+          # to the plain "Setup.exe" shown on the release page after the fact instead: a metadata
+          # PATCH on the already-uploaded asset, not a re-upload.
+          repo="${APP_REPO_URL#https://github.com/}"
+          asset_id=$(gh api "repos/$repo/releases/tags/$RELEASE_TAG" --jq '.assets[] | select(.name == "Gamehook-win-Setup.exe") | .id')
+          if [ -n "$asset_id" ]; then
+            gh api -X PATCH "repos/$repo/releases/assets/$asset_id" -f name=Setup.exe
+          else
+            echo "::warning::Could not find Gamehook-win-Setup.exe asset to rename to Setup.exe."
+          fi
+
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"
