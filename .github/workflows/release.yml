@@ -164,6 +164,15 @@ jobs:
             --channel ${{ matrix.channel }} \
             --outputDir releases/${{ matrix.rid }}
 
+      # Velopack always names the Windows installer "<packId>-<channel>-Setup.exe" (no CLI option
+      # to override it) - rename it to the plain "Setup.exe" shown on the release page. Safe to
+      # rename: the auto-update feed only cares about the RELEASES file and .nupkg names, which
+      # this doesn't touch.
+      - name: Rename Windows installer to Setup.exe
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: mv "releases/${{ matrix.rid }}/Gamehook-${{ matrix.channel }}-Setup.exe" "releases/${{ matrix.rid }}/Setup.exe"
+
       - name: Smoke test Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         shell: bash

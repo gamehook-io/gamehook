@@ -94,7 +94,7 @@ public static class DependencyInjection
             .WriteTo.File(
                 Path.Combine(logDirectory, "gamehook-.log"),
                 rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 10,
+                retainedFileCountLimit: 3,
                 fileSizeLimitBytes: 10 * 1024 * 1024,
                 rollOnFileSizeLimit: true,
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")

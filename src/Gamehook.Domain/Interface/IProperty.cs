@@ -26,6 +26,21 @@ public interface IProperty
 
     bool TryDecode(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references, out object? value, out string? error);
 
+    /// Reverse of TryDecode: turns `value` into this property's raw bytes. `currentBytes` (exactly
+    /// Length bytes) is the basis to merge onto for bit-masked properties (Bits set) - it must
+    /// already reflect any other pending edit to the same byte(s), not a stale poll snapshot, or a
+    /// concurrent edit to a sibling bit field can be silently clobbered.
+    bool TryEncode(
+        object? value,
+        ReadOnlyMemory<byte> currentBytes,
+        IReadOnlyDictionary<string, ReferenceTable> references,
+        out ReadOnlyMemory<byte> bytes,
+        out string? error);
+
+    /// Commits bytes already written to the device straight into Bytes/Value, without waiting for
+    /// the next poll, so the UI reflects an edit immediately.
+    void ApplyWrittenBytes(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references);
+
     /// Address-backed properties report the memory they need; value-only properties return null.
     IDriver.MemorySegmentRequest? BuildRequest();
 

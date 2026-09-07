@@ -19,6 +19,10 @@ VelopackApp.Build().Run();
 // RecoveryRunner - no Host, no DI, no Avalonia - so it still works even if none of that can start.
 if (args.Contains("--recover"))
 {
+    // The app has no console subsystem (see the csproj), so nothing is visible by default -
+    // recovery is an explicit, console-facing action, so it always gets one regardless of
+    // ShowConsole (RecoveryRunner writes its progress with plain Console.WriteLine).
+    if (OperatingSystem.IsWindows()) ConsoleWindow.Allocate();
     return RecoveryRunner.Run(args);
 }
 
@@ -27,6 +31,7 @@ if (args.Contains("--recover"))
 // `--recover` uses, so a shipped-bad-binary recovers itself instead of leaving users stuck.
 if (CrashGuard.RecordLaunchAttempt() > CrashGuard.CrashLoopThreshold)
 {
+    if (OperatingSystem.IsWindows()) ConsoleWindow.Allocate();
     // If recovery is unavailable, allow normal startup so transient failures do not
     // permanently lock users out of unpackaged or offline installations.
     RecoveryRunner.Run(args);
@@ -49,6 +54,13 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 // - a developer's local run shouldn't pick up whatever's sitting in their real Gamehook profile.
 var profileDirectory = FilesystemProvider.GetGamehookProfileDirectory(builder.Configuration);
 builder.Configuration.AddJsonFile(Path.Combine(profileDirectory, "appsettings.json"), optional: true, reloadOnChange: false);
+
+// Opt-in only (e.g. to see startup errors that never made it to a log file yet) - the app has no
+// console subsystem, so without this nothing ever shows one in the first place.
+if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("ShowConsole", false))
+{
+    ConsoleWindow.Allocate();
+}
 #endif
 
 builder.Services.AddGamehook(builder.Configuration);
@@ -96,3 +108,15 @@ static AppBuilder BuildAvaloniaApp()
 
     return builder;
 }
+
+#if !DEBUG
+// The exe has no console subsystem (WinExe, Release-only - see the csproj), so Windows never
+// shows a console at all unless something explicitly allocates one.
+internal static class ConsoleWindow
+{
+    [DllImport("kernel32.dll")]
+    private static extern bool AllocConsole();
+
+    public static void Allocate() => AllocConsole();
+}
+#endif

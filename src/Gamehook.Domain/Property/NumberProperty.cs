@@ -25,6 +25,53 @@ public sealed class NumberProperty : Property
         _ => checked((int)ReadBinaryCodedDecimal(bytes.Span)),
     };
 
+    protected override ReadOnlyMemory<byte> Encode(object? value, ReadOnlyMemory<byte> currentBytes, IReadOnlyDictionary<string, ReferenceTable> references)
+    {
+        var raw = Type switch
+        {
+            "int" or "uint" => ToRaw(value),
+            _ => ToBinaryCodedDecimalRaw(value),
+        };
+        return MergeBits(currentBytes, raw);
+    }
+
+    private static ulong ToRaw(object? value) => value switch
+    {
+        null => throw new InvalidDataException("Cannot encode a null value."),
+        ulong u => u,
+        string s => ulong.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? unchecked((ulong)parsed)
+            : long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var signed)
+                ? unchecked((ulong)signed)
+                : throw new InvalidDataException($"'{s}' is not a valid integer."),
+        _ => unchecked((ulong)Convert.ToInt64(value, CultureInfo.InvariantCulture)),
+    };
+
+    private static ulong ToBinaryCodedDecimalRaw(object? value)
+    {
+        var text = value switch
+        {
+            null => throw new InvalidDataException("Cannot encode a null value."),
+            string s => s,
+            decimal d => d.ToString(CultureInfo.InvariantCulture),
+            _ => Convert.ToDecimal(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture),
+        };
+
+        if (!decimal.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var decimalValue) || decimalValue < 0)
+            throw new InvalidDataException($"'{text}' is not a valid non-negative binary-coded decimal.");
+
+        ulong raw = 0;
+        var shift = 0;
+        while (decimalValue > 0)
+        {
+            var digit = (byte)(decimalValue % 10);
+            decimalValue /= 10;
+            raw |= (ulong)digit << shift;
+            shift += 4;
+        }
+        return raw;
+    }
+
     private static decimal ReadBinaryCodedDecimal(ReadOnlySpan<byte> bytes)
     {
         decimal value = 0;

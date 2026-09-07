@@ -18,6 +18,37 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
     [ObservableProperty]
     private PropertyTreeNodeViewModel? selectedNode;
 
+    // The text box the user is typing into. Deliberately not re-stamped from ActiveNode.DisplayValue
+    // on every poll tick (only when the selection itself changes) - otherwise a live game value
+    // would overwrite the user's in-progress edit out from under them.
+    [ObservableProperty]
+    private string? editValueText;
+
+    [ObservableProperty]
+    private string? editError;
+
+    public bool HasEditError => EditError is not null;
+
+    partial void OnEditErrorChanged(string? value) => OnPropertyChanged(nameof(HasEditError));
+
+    private string? lastSubmittedText;
+
+    // bitArray editing (a per-bit toggle grid) isn't implemented yet - it still shows read-only.
+    public bool CanEditValue => ActiveNode?.Property is { Type: "string" or "int" or "uint" or "binaryCodedDecimal" or "bool" };
+
+    // Fires the write on Enter or focus-out. Re-submitting the same text (e.g. Enter then tabbing
+    // away) is a no-op rather than a second redundant device write.
+    public async Task SubmitEditAsync()
+    {
+        if (ActiveNode?.Property is not { } property || Main.Mapper is not { } mapper) return;
+        var text = EditValueText ?? "";
+        if (text == lastSubmittedText) return;
+        lastSubmittedText = text;
+
+        var (success, error) = await mapper.WriteAsync(property.Name, text).ConfigureAwait(true);
+        EditError = success ? null : error;
+    }
+
     // A replacement inspector starts blank even though the property that was floated remains
     // selected globally. Its next selection behaves like a normal docked inspector.
     public PropertyToolViewModel(MainWindowViewModel main, bool suppressCurrentSelection = false)
@@ -125,6 +156,10 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(HasSelectedProperty));
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(CanEditValue));
+        EditValueText = ActiveNode?.DisplayValue;
+        EditError = null;
+        lastSubmittedText = EditValueText;
     }
 
     private void UpdateFloatCapability() => CanFloat = HasSelectedProperty;

@@ -165,6 +165,82 @@ public abstract class Property : IProperty
         }
     }
 
+    public bool TryEncode(
+        object? value,
+        ReadOnlyMemory<byte> currentBytes,
+        IReadOnlyDictionary<string, ReferenceTable> references,
+        out ReadOnlyMemory<byte> bytes,
+        out string? error)
+    {
+        if (currentBytes.Length != Length)
+        {
+            bytes = default;
+            error = $"Property '{Name}': expected {Length} current byte(s) to merge onto, got {currentBytes.Length}.";
+            return false;
+        }
+
+        try
+        {
+            bytes = EncodeWithReference(value, currentBytes, references);
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or OverflowException or FormatException)
+        {
+            bytes = default;
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public void ApplyWrittenBytes(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references)
+    {
+        var value = DecodeWithReference(bytes, references);
+        Bytes = bytes;
+        DecodedValue = value;
+        Value = value;
+        refreshed = true;
+    }
+
+    private ReadOnlyMemory<byte> EncodeWithReference(
+        object? value,
+        ReadOnlyMemory<byte> currentBytes,
+        IReadOnlyDictionary<string, ReferenceTable> references)
+    {
+        if (Reference is { } reference && references.TryGetValue(reference, out var table)
+            && TryReverseResolveReference(table, value, out var raw))
+        {
+            return MergeBits(currentBytes, raw);
+        }
+
+        return Encode(value, currentBytes, references);
+    }
+
+    // Reverse of ResolveReference: given the display value shown to the user, find the raw key the
+    // table maps it from. Tables are small (character maps aside, which never carry a Reference),
+    // so a linear scan is fine and avoids keeping a second reverse dictionary in sync.
+    private static bool TryReverseResolveReference(ReferenceTable table, object? value, out ulong raw)
+    {
+        var text = value?.ToString();
+        if (text is null)
+        {
+            raw = 0;
+            return false;
+        }
+
+        foreach (var (key, mapped) in table.Values)
+        {
+            if (string.Equals(mapped, text, StringComparison.Ordinal))
+            {
+                raw = key;
+                return true;
+            }
+        }
+
+        raw = 0;
+        return false;
+    }
+
     public IDriver.MemorySegmentRequest? BuildRequest()
     {
         // Virtual containers are populated by script (Mapper.memory.fill), never by the driver.
@@ -283,6 +359,11 @@ public abstract class Property : IProperty
 
     protected abstract object? Decode(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references);
 
+    /// Reverse of Decode. `currentBytes` is exactly Length bytes long (TryEncode already checked)
+    /// and is the merge basis for bit-masked properties; whole-byte-granularity properties (string,
+    /// bitArray) are free to ignore it and return a full Length-byte replacement.
+    protected abstract ReadOnlyMemory<byte> Encode(object? value, ReadOnlyMemory<byte> currentBytes, IReadOnlyDictionary<string, ReferenceTable> references);
+
     protected virtual object? DecodeStaticValue(string value) => null;
 
     // a reference table can map onto either numeric ids or display strings, independent of the property's own declared type
@@ -303,6 +384,31 @@ public abstract class Property : IProperty
             value = (value << 8) | span[byteIndex];
         }
         return value;
+    }
+
+    /// Inverse of ReadInteger + ApplyBits: reads the full integer currently in `currentBytes`,
+    /// replaces just this property's bit field with `rawValue`, and re-serializes all Length bytes.
+    /// This is what keeps a nibble-field write from clobbering its sibling nibble, provided the
+    /// caller passes a `currentBytes` that already reflects any other pending write to the same
+    /// byte(s) - Property itself only guarantees the merge arithmetic, not write ordering.
+    protected ReadOnlyMemory<byte> MergeBits(ReadOnlyMemory<byte> currentBytes, ulong rawValue)
+    {
+        var existing = ReadInteger(currentBytes);
+        var merged = (existing & ~(bitMask << bitShift)) | ((rawValue & bitMask) << bitShift);
+        return WriteInteger(merged, currentBytes.Length);
+    }
+
+    private byte[] WriteInteger(ulong value, int length)
+    {
+        var bytes = new byte[length];
+        for (var index = 0; index < length; index++)
+        {
+            var shift = 8 * (length - 1 - index);
+            var b = (byte)((value >> shift) & 0xFF);
+            var byteIndex = IntegerEndianness == Endianness.Little ? length - 1 - index : index;
+            bytes[byteIndex] = b;
+        }
+        return bytes;
     }
 
     /// Applies this property's own bits selector. The selector is a string in the mapper XML but is

@@ -33,6 +33,19 @@ public partial class HexViewerToolView : UserControl
                 main.SelectBytes(selection.RegionId, selection.StartingAddress, selection.Bytes);
             }
         };
+        HexViewer.ByteEditRequested += async (_, edit) =>
+        {
+            if (DataContext is not HexViewerToolViewModel { Main.Mapper: { } mapper })
+            {
+                return;
+            }
+
+            var (success, _) = await mapper.WriteRawBytesAsync(edit.RegionId, edit.Address, new[] { edit.NewValue });
+            if (!success)
+            {
+                HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
+            }
+        };
         DataContextChanged += (_, _) => UpdateSubscription();
         AttachedToVisualTree += (_, _) => UpdateSubscription();
         DetachedFromVisualTree += (_, _) => ClearSubscription();

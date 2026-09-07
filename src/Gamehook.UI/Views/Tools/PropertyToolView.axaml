@@ -89,10 +89,15 @@
                 </Grid>
 
                 <Border Padding="0,0,0,12" BorderBrush="{StaticResource AccentDarkBrush}" BorderThickness="0,0,0,1">
-                    <StackPanel Spacing="4">
+                    <StackPanel Spacing="4" DataContext="{Binding #Root.DataContext}" x:DataType="tools:PropertyToolViewModel">
                         <TextBlock Text="CURRENT VALUE" Classes="eyebrow" />
-                        <TextBlock Text="{Binding DisplayValue, TargetNullValue='—'}" FontSize="18" FontWeight="SemiBold"
-                                   Foreground="#82B8F2" TextWrapping="Wrap" />
+                        <TextBox Text="{Binding EditValueText, Mode=TwoWay}" FontSize="18" FontWeight="SemiBold"
+                                 Foreground="#82B8F2" IsVisible="{Binding CanEditValue}"
+                                 LostFocus="ValueTextBox_LostFocus" KeyDown="ValueTextBox_KeyDown" />
+                        <TextBlock Text="{Binding ActiveNode.DisplayValue, TargetNullValue='—'}" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="#82B8F2" TextWrapping="Wrap" IsVisible="{Binding !CanEditValue}" />
+                        <TextBlock Text="{Binding EditError}" Foreground="#E06C6C" FontSize="12" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasEditError}" />
                     </StackPanel>
                 </Border>
 

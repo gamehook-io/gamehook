@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using Gamehook.Domain;
@@ -51,6 +52,43 @@ public sealed class RetroArchDriver : IDriver, IDisposable
             return await ReadCore(request).ConfigureAwait(false);
         }
         finally { readGate.Release(); }
+    }
+
+    public async Task Write(IDriver.WriteRequest request)
+    {
+        await readGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            await WriteCore(request).ConfigureAwait(false);
+        }
+        finally { readGate.Release(); }
+    }
+
+    private async Task WriteCore(IDriver.WriteRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.System);
+        ArgumentNullException.ThrowIfNull(request.Segments);
+
+        foreach (var segment in request.Segments)
+        {
+            if (segment.Bytes.Length == 0) continue;
+
+            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == segment.RegionId)?.BusAddress is not { } baseAddress)
+            {
+                throw new NotSupportedException($"No known base address for region '{segment.RegionId}' on {request.System.Id}.");
+            }
+
+            if (segment.StartingAddress > uint.MaxValue - baseAddress
+                || (ulong)segment.Bytes.Length > (ulong)uint.MaxValue - baseAddress - segment.StartingAddress + 1)
+                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
+
+            var address = baseAddress + (uint)segment.StartingAddress;
+            var command = Encoding.ASCII.GetBytes(
+                $"WRITE_CORE_MEMORY {address:x} {string.Join(' ', segment.Bytes.ToArray().Select(b => b.ToString("x2")))}\n");
+            await client.SendAsync(command, command.Length).ConfigureAwait(false);
+        }
     }
 
     private async Task<IDriver.Response> ReadCore(IDriver.Request request)

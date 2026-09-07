@@ -7,9 +7,17 @@
         <Nullable>enable</Nullable>
         <EnableAvaloniaXamlCompilation>true</EnableAvaloniaXamlCompilation>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <!-- Embeds the icon into the exe's Win32 resources - without this the exe (and every
+             shortcut Explorer/Start Menu/Velopack create pointing at it) shows a generic icon. -->
+        <ApplicationIcon>icon.ico</ApplicationIcon>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <!-- No console subsystem, so Windows never shows a console window at all (not even
+             briefly) unless the app explicitly AllocConsole()s one - see Program.cs. Only affects
+             the Windows PE subsystem bit; a Linux publish is unaffected and keeps writing to its
+             inherited terminal normally. -->
+        <OutputType>WinExe</OutputType>
         <!-- Ahead-of-time native code reduces cold-start JIT work. -->
         <PublishReadyToRun>true</PublishReadyToRun>
         <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
@@ -46,6 +54,7 @@
 
     <ItemGroup>
       <AvaloniaResource Include="icon.png" />
+      <AvaloniaResource Include="icon.ico" />
     </ItemGroup>
 
 </Project>

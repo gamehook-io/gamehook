@@ -34,6 +34,7 @@ public class Mapper : IMapper, IDisposable
     {
         if (disposed) return;
         disposed = true;
+        writeGate.Dispose();
         (driver as IDisposable)?.Dispose();
     }
     private readonly GameSystem system;
@@ -65,6 +66,18 @@ public class Mapper : IMapper, IDisposable
     private readonly Property[] compiledProperties;
     private readonly Dictionary<string, Property> propertiesByPath;
     private readonly IReadOnlyList<IDriver.MemorySegmentRequest> requests;
+
+    // Serializes every property write for this mapper - writes are user-driven and rare, so one
+    // gate per mapper is simpler than per-address locking and still fixes the actual hazard: two
+    // edits to bit fields sharing a byte (e.g. two 4-bit nibbles) racing each other's read-modify-write.
+    private readonly SemaphoreSlim writeGate = new(1, 1);
+
+    // Byte-granular "what did we last actually write here" cache. A write always merges onto this
+    // (falling back to the property's last-read Bytes only when nothing has been written there yet)
+    // instead of the property's possibly-stale poll snapshot, so a second rapid edit to a sibling
+    // bit field never clobbers the first edit's still-in-flight write. Advisory only - the next real
+    // poll (Property.Refresh) always wins and overwrites these with what the device actually reports.
+    private readonly Dictionary<(string RegionId, ulong Offset), byte> writeShadow = new();
 
     /// Whether this mapper asks the driver for any bytes at all. A static-only mapper is still
     /// valid with an empty response; one that wants memory and gets none has lost the game.
@@ -383,6 +396,128 @@ public class Mapper : IMapper, IDisposable
             LastReadMetrics.InlineCalculations.TotalMilliseconds,
             LastReadMetrics.Postprocessor.TotalMilliseconds);
         return true;
+    }
+
+    public async Task<(bool Success, string? Error)> WriteAsync(string propertyPath, object? value, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if (!propertiesByPath.TryGetValue(propertyPath, out var property))
+        {
+            return (false, $"Unknown property '{propertyPath}'.");
+        }
+
+        var request = property.BuildRequest();
+        if (request is null)
+        {
+            return (false, $"Property '{propertyPath}' is not backed by device memory and cannot be written.");
+        }
+
+        await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ReadOnlyMemory<byte> currentBytes;
+            try
+            {
+                currentBytes = await ResolveCurrentBytes(property, request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+
+            if (!property.TryEncode(value, currentBytes, references, out var newBytes, out var error))
+            {
+                return (false, error);
+            }
+
+            var (success, writeError) = await WriteBytesToDevice(request.RegionId, request.StartingAddress, newBytes, cancellationToken).ConfigureAwait(false);
+            if (!success)
+            {
+                return (false, writeError);
+            }
+
+            property.ApplyWrittenBytes(newBytes, references);
+            return (true, null);
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+    }
+
+    // Raw byte poke (hex editor), bypassing property encoding entirely - the caller already knows
+    // exactly which bytes it wants written. Still goes through writeGate/writeShadow so it composes
+    // safely with concurrent property writes to overlapping bytes.
+    public async Task<(bool Success, string? Error)> WriteRawBytesAsync(string regionId, ulong startingAddress, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await WriteBytesToDevice(regionId, startingAddress, bytes, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+    }
+
+    // Caller must already hold writeGate.
+    private async Task<(bool Success, string? Error)> WriteBytesToDevice(string regionId, ulong startingAddress, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await driver.Write(new IDriver.WriteRequest(
+                system,
+                [new IDriver.MemorySegmentWrite(regionId, startingAddress, bytes)])).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            writeShadow[(regionId, startingAddress + (ulong)i)] = bytes.Span[i];
+        }
+
+        return (true, null);
+    }
+
+    // currentBytes is the merge basis TryEncode needs for bit-masked properties. Prefer the write
+    // shadow (the last thing actually written here) byte-by-byte, falling back to the property's
+    // own last-read Bytes, and only going back to the driver for a fresh read of just this range if
+    // neither has a value yet (e.g. writing a property before its first poll has ever completed).
+    private async Task<ReadOnlyMemory<byte>> ResolveCurrentBytes(Property property, IDriver.MemorySegmentRequest request, CancellationToken cancellationToken)
+    {
+        var bytes = new byte[request.Length];
+        var complete = true;
+        for (var i = 0; i < request.Length; i++)
+        {
+            if (writeShadow.TryGetValue((request.RegionId, request.StartingAddress + (ulong)i), out var shadowByte))
+            {
+                bytes[i] = shadowByte;
+            }
+            else if (property.Bytes.Length == request.Length)
+            {
+                bytes[i] = property.Bytes.Span[i];
+            }
+            else
+            {
+                complete = false;
+                break;
+            }
+        }
+        if (complete) return bytes;
+
+        var response = await driver.Read(new IDriver.Request(system, [request])).ConfigureAwait(false);
+        var segment = response.Segments.FirstOrDefault(s =>
+            s.RegionId == request.RegionId && s.StartingAddress == request.StartingAddress && s.Bytes.Length == request.Length);
+        if (segment is null)
+        {
+            throw new InvalidDataException($"Could not read current bytes for property '{property.Name}' before writing.");
+        }
+        return segment.Bytes;
     }
 
     private static bool ResponsesEqual(IDriver.Response left, IDriver.Response right) =>

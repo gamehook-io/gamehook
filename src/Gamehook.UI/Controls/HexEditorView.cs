@@ -54,6 +54,10 @@ public sealed class HexEditorView : Control
     // red marks properties pinned in the Pinned panel, regardless of selection.
     private static readonly IPen HighlightPen = new Pen(new SolidColorBrush(Color.Parse("#56A8FF")), 2);
     private static readonly IPen PinnedPropertyPen = new Pen(new SolidColorBrush(Color.Parse("#E23F3F")), 2);
+    // Amber marks the byte currently being typed into, distinct from selection blue/pinned red.
+    private static readonly IBrush EditingBrush = new SolidColorBrush(Color.Parse("#4D3A12"));
+    private static readonly IPen EditingPen = new Pen(new SolidColorBrush(Color.Parse("#E8A33D")), 2);
+    private static readonly IBrush EditingTextBrush = new SolidColorBrush(Color.Parse("#FFD98A"));
 
     private ReadOnlyMemory<byte> bytes = ReadOnlyMemory<byte>.Empty;
     private ulong regionStart;
@@ -111,6 +115,15 @@ public sealed class HexEditorView : Control
 
     public event EventHandler<IProperty>? PropertyClicked;
     public event EventHandler<HexSelection>? BytesSelected;
+    public event EventHandler<HexByteEditRequested>? ByteEditRequested;
+
+    // Double-click to type a replacement hex byte. `editingText` holds 0-2 typed hex digits;
+    // editing commits (raises ByteEditRequested) on Enter, Tab, losing focus, or a second typed
+    // digit, and applies optimistically to the local display right away so typing feels instant -
+    // ByteEditRequested's caller reports back via RevertByte if the actual device write failed.
+    private int editingOffset = -1;
+    private string editingText = "";
+    private int offsetOfLastEdit = -1;
 
     // Used by MainWindow to scroll the byte grid to a property picked in the tree.
     public Rect? GetPropertyBounds(IProperty property)
@@ -139,6 +152,7 @@ public sealed class HexEditorView : Control
     public HexEditorView()
     {
         ClipToBounds = true;
+        Focusable = true;
         ToolTip.SetTip(this, new StackPanel
         {
             Spacing = 2,
@@ -147,6 +161,7 @@ public sealed class HexEditorView : Control
         ToolTip.SetPlacement(this, PlacementMode.Pointer);
         ToolTip.SetServiceEnabled(this, false);
         EffectiveViewportChanged += (_, e) => { viewport = e.EffectiveViewport; InvalidateVisual(); };
+        LostFocus += (_, _) => CommitEdit();
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -163,6 +178,7 @@ public sealed class HexEditorView : Control
         if (change.Property == RegionIdProperty)
         {
             ClearSelection();
+            CancelEdit();
         }
 
         if (change.Property == BytesProperty || change.Property == StartingAddressProperty || change.Property == PropertiesProperty || change.Property == RegionIdProperty || change.Property == RefreshTokenProperty)
@@ -338,8 +354,16 @@ public sealed class HexEditorView : Control
                     context.DrawRectangle(HighlightPen, new Rect(x, y, CellWidth - 2, RowHeight - 2));
                 }
 
+                if (offset == editingOffset)
+                {
+                    context.FillRectangle(EditingBrush, new Rect(x, y, CellWidth - 2, RowHeight - 2));
+                    context.DrawRectangle(EditingPen, new Rect(x, y, CellWidth - 2, RowHeight - 2));
+                }
+
+                var hexText = offset == editingOffset ? (editingText + "__")[..2] : span[offset].ToString("X2");
                 context.DrawText(
-                    new FormattedText(span[offset].ToString("X2"), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, MonoTypeface, 13, TextBrush),
+                    new FormattedText(hexText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, MonoTypeface, 13,
+                        offset == editingOffset ? EditingTextBrush : TextBrush),
                     new Point(x + 2, y + 2));
 
                 var asciiX = AddressColumnWidth + BytesPerRow * CellWidth + AsciiGap + col * AsciiCharWidth;
@@ -355,7 +379,21 @@ public sealed class HexEditorView : Control
     {
         base.OnPointerPressed(e);
 
-        var offset = OffsetAt(e.GetPosition(this));
+        var position = e.GetPosition(this);
+        var offset = OffsetAt(position);
+
+        if (editingOffset >= 0 && offset != editingOffset)
+        {
+            CommitEdit();
+        }
+
+        if (e.ClickCount == 2 && offset is { } editOffset && IsHexColumn(position))
+        {
+            BeginEdit(editOffset);
+            e.Handled = true;
+            return;
+        }
+
         if (offset is { } unmappedOffset && byteOwners[unmappedOffset] is null)
         {
             selectionAnchor = unmappedOffset;
@@ -366,10 +404,146 @@ public sealed class HexEditorView : Control
             InvalidateVisual();
             e.Handled = true;
         }
-        else if (PropertyAt(e.GetPosition(this)) is { } property)
+        else if (PropertyAt(position) is { } property)
         {
             PropertyClicked?.Invoke(this, property);
         }
+    }
+
+    private bool IsHexColumn(Point position)
+    {
+        var relativeX = position.X - AddressColumnWidth;
+        return relativeX >= 0 && relativeX < BytesPerRow * CellWidth;
+    }
+
+    private void BeginEdit(int offset)
+    {
+        ClearSelection();
+        editingOffset = offset;
+        editingText = "";
+        Focus();
+        InvalidateVisual();
+    }
+
+    // Applies immediately to the local display so typing feels instant; ByteEditRequested's
+    // subscriber calls RevertByte if the write actually fails.
+    private void CommitEdit()
+    {
+        if (editingOffset < 0)
+        {
+            return;
+        }
+
+        var offset = editingOffset;
+        var text = editingText;
+        editingOffset = -1;
+        editingText = "";
+        offsetOfLastEdit = offset;
+
+        if (text.Length == 0 || RegionId is not { } regionId)
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        var newValue = byte.Parse(text.PadLeft(2, '0'), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var address = regionStart + (ulong)offset;
+        var originalValue = bytes.Span[offset];
+        if (newValue == originalValue)
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        var array = bytes.ToArray();
+        array[offset] = newValue;
+        bytes = array;
+        InvalidateVisual();
+
+        ByteEditRequested?.Invoke(this, new HexByteEditRequested(regionId, address, originalValue, newValue));
+    }
+
+    private void CancelEdit()
+    {
+        editingOffset = -1;
+        editingText = "";
+        InvalidateVisual();
+    }
+
+    // Called by the ByteEditRequested subscriber when the device write actually failed, to undo
+    // the optimistic local edit. No-ops if the view has since moved on (region change, a newer
+    // edit to the same byte, or a real poll already overwrote it with something else).
+    public void RevertByte(string regionId, ulong address, byte originalValue)
+    {
+        if (RegionId != regionId || address < regionStart)
+        {
+            return;
+        }
+
+        var offset = (int)(address - regionStart);
+        if (offset < 0 || offset >= bytes.Length)
+        {
+            return;
+        }
+
+        var array = bytes.ToArray();
+        array[offset] = originalValue;
+        bytes = array;
+        InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (editingOffset < 0)
+        {
+            return;
+        }
+
+        if (TryGetHexDigit(e.Key, out var digit))
+        {
+            editingText = editingText.Length >= 2 ? digit.ToString() : editingText + digit;
+            if (editingText.Length == 2)
+            {
+                CommitEdit();
+                // auto-advance to the next byte so pasting/typing a run of bytes flows naturally
+                if (editingOffset < 0 && offsetOfLastEdit + 1 < byteOwners.Length)
+                {
+                    BeginEdit(offsetOfLastEdit + 1);
+                }
+            }
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Back:
+                if (editingText.Length > 0) editingText = editingText[..^1];
+                InvalidateVisual();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+            case Key.Tab:
+                CommitEdit();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                CancelEdit();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private static bool TryGetHexDigit(Key key, out char digit)
+    {
+        if (key is >= Key.D0 and <= Key.D9) { digit = (char)('0' + (key - Key.D0)); return true; }
+        if (key is >= Key.NumPad0 and <= Key.NumPad9) { digit = (char)('0' + (key - Key.NumPad0)); return true; }
+        if (key is >= Key.A and <= Key.F) { digit = (char)('A' + (key - Key.A)); return true; }
+        digit = default;
+        return false;
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -535,3 +709,5 @@ public sealed class HexEditorView : Control
 }
 
 public sealed record HexSelection(string RegionId, ulong StartingAddress, ReadOnlyMemory<byte> Bytes);
+
+public sealed record HexByteEditRequested(string RegionId, ulong Address, byte OriginalValue, byte NewValue);

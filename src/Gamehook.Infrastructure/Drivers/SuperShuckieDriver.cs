@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.IO.MemoryMappedFiles;
+using System.Linq;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Gamehook.Domain.Interface;
@@ -126,6 +127,69 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
         }
 
         return new IDriver.Response(DateTimeOffset.UtcNow, segments);
+    }
+
+    public async Task Write(IDriver.WriteRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.System);
+        ArgumentNullException.ThrowIfNull(request.Segments);
+
+        foreach (var segment in request.Segments)
+        {
+            if (segment.Bytes.Length == 0) continue;
+
+            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == segment.RegionId)?.BusAddress is not { } baseAddress)
+            {
+                throw new NotSupportedException($"No known base address for region '{segment.RegionId}' on {request.System.Id}.");
+            }
+
+            if (segment.StartingAddress > uint.MaxValue - baseAddress
+                || (ulong)segment.Bytes.Length > (ulong)uint.MaxValue - baseAddress - segment.StartingAddress + 1)
+                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
+
+            var address = baseAddress + (uint)segment.StartingAddress;
+            await SendWriteAndAwaitAck(address, segment.Bytes).ConfigureAwait(false);
+        }
+    }
+
+    // Layout: header, then a 4-byte game address, a 4-byte payload length, then the raw payload
+    // bytes - same header shape as Setup, just a single address/length/payload block instead of a
+    // block table.
+    private async Task SendWriteAndAwaitAck(uint address, ReadOnlyMemory<byte> payload)
+    {
+        var packet = new byte[HeaderSize + 8 + payload.Length];
+        WriteHeader(packet, Instruction.Write, isResponse: false);
+        BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(8, 4), address);
+        BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(12, 4), (uint)payload.Length);
+        payload.Span.CopyTo(packet.AsSpan(HeaderSize));
+
+        await configureLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Exception? lastError = null;
+            for (var attempt = 0; attempt < AckSendAttempts; attempt++)
+            {
+                try
+                {
+                    await client.SendAsync(packet, packet.Length).ConfigureAwait(false);
+                    if (await TryReceiveAck(Instruction.Write).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+                }
+                catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+                {
+                    lastError = ex;
+                }
+            }
+
+            throw new TimeoutException($"Super Shuckie did not acknowledge the write to 0x{address:x}.", lastError);
+        }
+        finally
+        {
+            configureLock.Release();
+        }
     }
 
     // Poke-A-Byte's shared memory layout is fixed once negotiated via Setup, so the block list only
