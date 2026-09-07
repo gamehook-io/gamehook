@@ -188,7 +188,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist/${{ matrix.rid }}
-          cp "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
+          cp "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/Gamehook.exe"
 
       - name: Store verified release assets
         uses: actions/upload-artifact@v4
@@ -264,6 +264,6 @@ jobs:
           # Extra friendly-named copy of the installer, alongside vpk's own Gamehook-win-Setup.exe -
           # both stay on the release. No --clobber needed: the fail-fast check above guarantees this
           # is always a fresh release with no prior asset under this name.
-          gh release upload "$RELEASE_TAG" dist-assets/dist-win/gamehook-setup.exe --repo "$APP_REPO_URL"
+          gh release upload "$RELEASE_TAG" dist-assets/dist-win/Gamehook.exe --repo "$APP_REPO_URL"
 
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"
