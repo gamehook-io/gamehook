@@ -172,11 +172,43 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/Gamehook.AppImage
 
+      # vpk names every file "<packId>-<channel>-..." because that pattern is how the client-side
+      # updater finds the right .nupkg/releases.*.json/RELEASES for its channel - those three must
+      # keep vpk's exact names. Setup.exe/Portable.zip/AppImage aren't looked up by anything, they're
+      # just what a human clicks to download, so move them to their own directory under friendly
+      # names now, before either directory is uploaded anywhere. This is *why* renaming used to
+      # break things: doing it after vpk pack but in the same directory made `vpk upload github`
+      # (next job) go looking for a file under the name it itself generated and not find it -
+      # moving them out entirely instead of renaming in place sidesteps that completely.
+      - name: Relocate Windows installer/portable to friendly names
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.rid }}
+          version_dashed="${{ needs.resolve.outputs.version }}"
+          version_dashed="${version_dashed//./-}"
+          mv "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
+          mv "releases/${{ matrix.rid }}/Gamehook-win-Portable.zip" "dist/${{ matrix.rid }}/gamehook-${version_dashed}-portable.zip"
+
+      - name: Relocate Linux AppImage
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.rid }}
+          mv "releases/${{ matrix.rid }}/Gamehook.AppImage" "dist/${{ matrix.rid }}/Gamehook.AppImage"
+
       - name: Store verified release assets
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.channel }}
           path: releases/${{ matrix.rid }}/
+          if-no-files-found: error
+
+      - name: Store friendly-named download assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.channel }}
+          path: dist/${{ matrix.rid }}/
           if-no-files-found: error
 
   publish:
@@ -192,6 +224,10 @@ jobs:
         with:
           pattern: release-*
           path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist-assets
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
       - name: Publish verified platform assets
@@ -221,28 +257,15 @@ jobs:
             --publish false
           done
 
-          # Velopack always names the Windows installer "<packId>-<channel>-Setup.exe" (no CLI
-          # option to override it, and `vpk upload github` itself requires that exact name to
-          # exist on disk - renaming the file beforehand just makes the upload fail). Rename it
-          # to the plain "Setup.exe" shown on the release page after the fact instead: a metadata
-          # PATCH on the already-uploaded asset, not a re-upload.
-          # `gh api .../releases/tags/<tag>` 404s on a draft release (tags don't exist until
-          # publish) - `gh release view` finds it anyway (it matches by tag client-side, not via
-          # that REST endpoint), so it's the only one of the two that works here.
-          repo="${APP_REPO_URL#https://github.com/}"
-          assets_json=$(gh release view "$RELEASE_TAG" --repo "$APP_REPO_URL" --json assets --jq '.assets')
-          asset_id=$(echo "$assets_json" | jq -r '.[] | select(.name == "Gamehook-win-Setup.exe") | .id')
-          # A retry of this same draft (--merge true reuses it) can find a "Setup.exe" already
-          # renamed by an earlier, later-failed attempt - delete it first, or the PATCH below 422s
-          # on a duplicate name once the freshly re-uploaded installer tries to take that name.
-          stale_id=$(echo "$assets_json" | jq -r '.[] | select(.name == "Setup.exe") | .id')
-          if [ -n "$stale_id" ] && [ "$stale_id" != "null" ]; then
-            gh api -X DELETE "repos/$repo/releases/assets/$stale_id"
-          fi
-          if [ -n "$asset_id" ] && [ "$asset_id" != "null" ]; then
-            gh api -X PATCH "repos/$repo/releases/assets/$asset_id" -f name=Setup.exe
-          else
-            echo "::warning::Could not find Gamehook-win-Setup.exe asset to rename to Setup.exe."
-          fi
+          # The friendly-named human-facing files (renamed in the build job's "Relocate ..." steps,
+          # before vpk ever saw them) get attached directly - no asset-ID lookups or renaming after
+          # upload involved. --clobber makes this safe to retry against the same draft (--merge true
+          # above reuses it): it overwrites a same-named asset left over from an earlier attempt
+          # instead of erroring on it.
+          gh release upload "$RELEASE_TAG" \
+            dist-assets/dist-win/gamehook-setup.exe \
+            dist-assets/dist-win/gamehook-*-portable.zip \
+            dist-assets/dist-linux/Gamehook.AppImage \
+            --repo "$APP_REPO_URL" --clobber
 
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"
