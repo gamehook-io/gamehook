@@ -1,0 +1,270 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.UI.ViewModels"
+             xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
+             xmlns:domain="using:Gamehook.Domain.Interface"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Gamehook.UI.Views.Tools.PropertyToolView"
+             x:Name="Root"
+             x:DataType="tools:PropertyToolViewModel">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.inspector-label">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#7F9DC0" />
+            <Setter Property="LetterSpacing" Value="0.7" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.inspector-value">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="Border.inspector-row">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.inspector-card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceMutedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.editor-card">
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceMutedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+        <Style Selector="Button.value-editor-action">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.value-editor-action:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="TextBox.raw-byte-cell">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="#191A1C" />
+            <Setter Property="Foreground" Value="#D9DDE3" />
+            <Setter Property="CaretBrush" Value="#FFD98A" />
+            <Setter Property="BorderBrush" Value="#292C30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="MaxLength" Value="2" />
+        </Style>
+        <Style Selector="TextBox.raw-byte-cell:focus">
+            <Setter Property="BorderBrush" Value="#E8A33D" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{StaticResource SurfaceBrush}">
+        <StackPanel Spacing="8" Margin="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    IsVisible="{Binding IsEmpty}">
+            <Border Width="46" Height="46" Background="{StaticResource SurfaceMutedBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                <TextBlock Text="i" Foreground="#6E9ED4"
+                           FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="No property selected" FontSize="14" FontWeight="SemiBold" TextAlignment="Center" />
+            <TextBlock Text="Select a property in the tree, hex viewer, or Pinned list to inspect it."
+                       Classes="muted" TextAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Raw byte selection and mapped-property selection are mutually exclusive. -->
+        <ScrollViewer IsVisible="{Binding HasSelection}" AllowAutoHide="False">
+            <StackPanel Margin="16,14" Spacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap">
+                        <Run Text="Address range " />
+                        <Run Text="{Binding SelectionAddressRange}" />
+                    </TextBlock>
+                    <Border Classes="inspector-row">
+                        <Grid ColumnDefinitions="112,*">
+                            <TextBlock Grid.Column="0" Text="Raw Bytes" Classes="inspector-label" />
+                            <TextBlock Grid.Column="1" Text="{Binding SelectionRawBytesHex, TargetNullValue='—'}" Classes="inspector-value" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding SelectionParses}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SelectionParseViewModel">
+                            <Border Classes="inspector-row">
+                                <StackPanel Spacing="3">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="eyebrow" Margin="10,0,0,0" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding DisplayValue}" Foreground="#82B8F2"
+                                               Classes="inspector-value" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer IsVisible="{Binding HasSelectedProperty}" AllowAutoHide="False">
+            <StackPanel Margin="16,14" Spacing="14" DataContext="{Binding ActiveNode}"
+                        x:DataType="vm:PropertyTreeNodeViewModel">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Property.Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Property.Description}" Classes="muted" FontSize="12" TextWrapping="Wrap"
+                               IsVisible="{Binding HasDescription}" />
+                </StackPanel>
+
+                <Border Classes="editor-card" DataContext="{Binding #Root.DataContext}" x:DataType="tools:PropertyToolViewModel"
+                        IsVisible="{Binding !IsStaticValue}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Value" Classes="eyebrow" />
+                        <Grid ColumnDefinitions="*,80,80" ColumnSpacing="6">
+                            <ComboBox Grid.Column="0" ItemsSource="{Binding ReferenceValues}" SelectedItem="{Binding EditValueText, Mode=TwoWay}"
+                                      FontSize="18" FontWeight="SemiBold" Foreground="#82B8F2"
+                                      IsVisible="{Binding CanEditReference}" />
+                            <ToggleSwitch Grid.Column="0" IsChecked="{Binding EditBooleanValue, Mode=TwoWay}"
+                                          Content="Enabled" IsVisible="{Binding CanEditBoolean}" />
+                            <NumericUpDown Grid.Column="0" Value="{Binding EditNumberValue, Mode=TwoWay}"
+                                           FormatString="0" Increment="1" ClipValueToMinMax="False"
+                                           FontSize="18" FontWeight="SemiBold" Foreground="#82B8F2"
+                                           IsVisible="{Binding CanEditNumber}" />
+                            <TextBox Grid.Column="0" Text="{Binding EditValueText, Mode=TwoWay}" FontSize="18" FontWeight="SemiBold"
+                                     Foreground="#82B8F2" IsVisible="{Binding CanEditString}" />
+                            <ItemsControl Grid.Column="0" ItemsSource="{Binding BitValues}" IsVisible="{Binding CanEditBitArray}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <ToggleSwitch Margin="0,0,12,4" Content="{Binding Label}"
+                                                      IsChecked="{Binding IsSet, Mode=TwoWay}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Grid.Column="0" Text="{Binding ActiveNode.DisplayValue, TargetNullValue='—'}" FontSize="18" FontWeight="SemiBold"
+                                       Foreground="#82B8F2" TextWrapping="Wrap" IsVisible="{Binding ShowReadOnlyValue}" />
+                            <Button Grid.Column="1" Classes="action value-editor-action" Content="Save" Click="SaveValueButton_Click"
+                                    HorizontalAlignment="Stretch" MinWidth="0" IsEnabled="{Binding HasPendingValueEdit}"
+                                    IsVisible="{Binding HasEditableValue}" />
+                            <Button Grid.Column="2" Content="Cancel" Classes="secondary value-editor-action" Click="CancelValueButton_Click"
+                                    HorizontalAlignment="Stretch" MinWidth="0" IsEnabled="{Binding HasPendingValueEdit}"
+                                    IsVisible="{Binding HasEditableValue}" />
+                        </Grid>
+                        <TextBlock Text="{Binding EditError}" Foreground="#E06C6C" FontSize="12" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasEditError}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="editor-card" DataContext="{Binding #Root.DataContext}" x:DataType="tools:PropertyToolViewModel"
+                        IsVisible="{Binding HasRawBytes}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Raw Bytes" Classes="eyebrow" />
+                        <WrapPanel>
+                            <ItemsControl ItemsSource="{Binding RawByteEdits}" IsEnabled="{Binding CanEditRawBytes}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="tools:RawByteEditViewModel">
+                                        <TextBox Classes="raw-byte-cell" Text="{Binding Text, Mode=TwoWay}" Margin="0,0,4,4" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4" IsVisible="{Binding CanEditRawBytes}">
+                                <Button Classes="action value-editor-action" Content="Save" Width="80" Click="SaveRawBytesButton_Click"
+                                        IsEnabled="{Binding HasPendingRawBytesEdit}" />
+                                <Button Classes="secondary value-editor-action" Content="Cancel" Width="80" Click="CancelRawBytesButton_Click"
+                                        IsEnabled="{Binding HasPendingRawBytesEdit}" />
+                            </StackPanel>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding RawBytesEditError}" Foreground="#E06C6C" FontSize="12" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasRawBytesEditError}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="inspector-card" Margin="0,10,0,0">
+                    <StackPanel>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Type" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Length" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Length, StringFormat='{}{0} bytes'}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding Address, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Address" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Address, StringFormat='0x{0:X}'}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding Region, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Region" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Region}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding MemoryContainer, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Container" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding MemoryContainer}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding Bits, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Bits" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Bits}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding Reference, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Reference" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding Reference}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding CharacterMap, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Character Map" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding CharacterMap}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
+                                IsVisible="{Binding StaticValue, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="112,*">
+                                <TextBlock Grid.Column="0" Text="Static Value" Classes="inspector-label" />
+                                <TextBlock Grid.Column="1" Text="{Binding StaticValue}" Classes="inspector-value" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

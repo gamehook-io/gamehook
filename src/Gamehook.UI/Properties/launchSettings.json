@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "Gamehook.UI": {
+      "commandName": "Project",
+      "workingDirectory": ".",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

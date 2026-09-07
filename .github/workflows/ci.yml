@@ -24,6 +24,6 @@ jobs:
       - name: Test
         env:
           GAMEHOOK_TEST_MAPPERS: ${{ github.workspace }}/.test-mappers/dist
-        run: dotnet test src/GameHook.slnx -c Release --nologo
+        run: dotnet test src/Gamehook.slnx -c Release --nologo
       - name: Test calendar release versions
         run: python .github/scripts/test_release_version.py

@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Gamehook.UI.Views.AlertWindow"
+        Title="Gamehook"
+        Width="440" SizeToContent="Height"
+        MinWidth="440" MaxWidth="440"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#151617"
+        FontFamily="Consolas,DejaVu Sans Mono,monospace">
+
+    <Window.Styles>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#E3E6EB" />
+        </Style>
+        <Style Selector="Button.dismiss">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Padding" Value="16,6" />
+        </Style>
+    </Window.Styles>
+
+    <StackPanel Margin="24,20" Spacing="16">
+        <TextBlock Name="MessageText" FontSize="12" LineHeight="19" TextWrapping="Wrap" />
+        <Button Name="DismissButton" Content="OK" Classes="dismiss" Click="DismissButton_Click" />
+    </StackPanel>
+</Window>
