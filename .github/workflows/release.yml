@@ -226,9 +226,20 @@ jobs:
           # exist on disk - renaming the file beforehand just makes the upload fail). Rename it
           # to the plain "Setup.exe" shown on the release page after the fact instead: a metadata
           # PATCH on the already-uploaded asset, not a re-upload.
+          # `gh api .../releases/tags/<tag>` 404s on a draft release (tags don't exist until
+          # publish) - `gh release view` finds it anyway (it matches by tag client-side, not via
+          # that REST endpoint), so it's the only one of the two that works here.
           repo="${APP_REPO_URL#https://github.com/}"
-          asset_id=$(gh api "repos/$repo/releases/tags/$RELEASE_TAG" --jq '.assets[] | select(.name == "Gamehook-win-Setup.exe") | .id')
-          if [ -n "$asset_id" ]; then
+          assets_json=$(gh release view "$RELEASE_TAG" --repo "$APP_REPO_URL" --json assets --jq '.assets')
+          asset_id=$(echo "$assets_json" | jq -r '.[] | select(.name == "Gamehook-win-Setup.exe") | .id')
+          # A retry of this same draft (--merge true reuses it) can find a "Setup.exe" already
+          # renamed by an earlier, later-failed attempt - delete it first, or the PATCH below 422s
+          # on a duplicate name once the freshly re-uploaded installer tries to take that name.
+          stale_id=$(echo "$assets_json" | jq -r '.[] | select(.name == "Setup.exe") | .id')
+          if [ -n "$stale_id" ] && [ "$stale_id" != "null" ]; then
+            gh api -X DELETE "repos/$repo/releases/assets/$stale_id"
+          fi
+          if [ -n "$asset_id" ] && [ "$asset_id" != "null" ]; then
             gh api -X PATCH "repos/$repo/releases/assets/$asset_id" -f name=Setup.exe
           else
             echo "::warning::Could not find Gamehook-win-Setup.exe asset to rename to Setup.exe."
