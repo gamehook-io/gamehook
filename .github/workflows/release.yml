@@ -33,6 +33,15 @@ env:
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    # GitHub's release-list API silently omits draft releases for a token that only has read
+    # access - not a scoping choice we get to opt out of, it requires push access just to see a
+    # draft exists. Without this, release-version.py's "is this number already taken" check never
+    # sees the draft a prior failed run left behind, so it keeps resolving the same number (e.g.
+    # 26.09.1) every retry instead of advancing to 26.09.2 - which then collides with that
+    # very draft on upload. This job takes no write action itself; the permission is purely to
+    # make drafts visible.
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.value }}
       tag: ${{ steps.version.outputs.tag }}
@@ -236,11 +245,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
         run: |
-          if existing=$(gh release view "$RELEASE_TAG" --repo "$APP_REPO_URL" --json isDraft --jq .isDraft 2>/dev/null); then
-            if [ "$existing" != "true" ]; then
-              echo "Refusing to overwrite an already published release: $RELEASE_TAG" >&2
-              exit 1
-            fi
+          # Fail fast on ANY pre-existing release for this tag (draft or published) - don't try to
+          # merge/overwrite it. vpk's own GitHub uploader refuses to merge the feed files
+          # (releases.*.json) on a second upload no matter what, so a retry against a draft left
+          # over from a prior attempt was always going to fail partway through anyway, just later
+          # and messier (some assets uploaded, others not). A leftover draft from a failed run must
+          # be deleted on GitHub (or re-run with a different version) before trying again.
+          if gh release view "$RELEASE_TAG" --repo "$APP_REPO_URL" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists (draft or published). Refusing to merge/overwrite - delete the existing release on GitHub first, or resolve a different version." >&2
+            exit 1
           fi
           prerelease=false
           for channel in win linux; do
@@ -253,7 +266,7 @@ jobs:
             --releaseName "Gamehook $RELEASE_TAG" \
             --targetCommitish "$GITHUB_SHA" \
             --pre "$prerelease" \
-            --merge true \
+            --merge false \
             --publish false
           done
 
