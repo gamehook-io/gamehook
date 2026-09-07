@@ -1,0 +1,232 @@
+name: Release
+
+# Tests and packages both supported platforms before publishing a shared release.
+# Mapper tests use the exact commit written into the bundled configuration.
+# App updates consume these GitHub Releases unless a custom HTTPS feed is configured.
+on:
+  push:
+    tags:
+      - "??.??.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (yy.mm.N), or month (yy.mm) to choose next number. Blank uses current UTC month and next number."
+        required: false
+      mapper_commit:
+        description: "Pin Mapper:Commit to this gamehook-io/mappers commit sha. Leave blank to auto-resolve the latest commit on mapper_branch."
+        required: false
+      mapper_branch:
+        description: "Branch to resolve the latest gamehook-io/mappers commit from, when mapper_commit is left blank."
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  VPK_VERSION: "1.2.0"
+  MAPPERS_REPO: "gamehook-io/mappers"
+  APP_REPO_URL: "https://github.com/gamehook-io/gamehook"
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      tag: ${{ steps.version.outputs.tag }}
+      mapper_commit: ${{ steps.mapper.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve release version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/release-version.py
+
+      - name: Resolve pinned mapper commit
+        id: mapper
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_COMMIT: ${{ inputs.mapper_commit }}
+          INPUT_BRANCH: ${{ inputs.mapper_branch }}
+        run: |
+          if [ -n "$INPUT_COMMIT" ]; then
+            sha="$INPUT_COMMIT"
+          else
+            branch="$INPUT_BRANCH"
+            branch="${branch:-main}"
+            sha=$(gh api "repos/${{ env.MAPPERS_REPO }}/commits/$branch" --jq .sha)
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Mapper commit must be a full hexadecimal SHA." >&2
+            exit 1
+          fi
+          echo "Pinning Mapper:Commit to $sha"
+          echo "commit=$sha" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            channel: win
+            main_exe: Gamehook.UI.exe
+            icon: icon.ico
+          - os: ubuntu-latest
+            rid: linux-x64
+            channel: linux
+            main_exe: Gamehook.UI
+            icon: icon.png
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gamehook-io/mappers
+          ref: ${{ needs.resolve.outputs.mapper_commit }}
+          path: .release-mappers
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test release against pinned mappers
+        env:
+          GAMEHOOK_TEST_MAPPERS: ${{ github.workspace }}/.release-mappers/dist
+        run: dotnet test src/Gamehook.slnx -c Release --nologo
+
+      - name: Add dotnet tools to PATH
+        shell: bash
+        run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Install vpk
+        shell: bash
+        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+
+      - name: Pin mapper commit into appsettings.json
+        shell: bash
+        run: |
+          jq --arg commit "${{ needs.resolve.outputs.mapper_commit }}" \
+             '.Mapper.Commit = $commit | .Mapper.Source = "Proxy"' \
+             src/Gamehook.UI/appsettings.json > appsettings.tmp.json
+          mv appsettings.tmp.json src/Gamehook.UI/appsettings.json
+          cat src/Gamehook.UI/appsettings.json
+
+      - name: Publish self-contained single-file build
+        shell: bash
+        run: |
+          dotnet publish src/Gamehook.UI/Gamehook.UI.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:Version=${{ needs.resolve.outputs.version }} \
+            -p:InformationalVersion=${{ needs.resolve.outputs.tag }} \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -o publish/${{ matrix.rid }}
+
+      # Gate: nothing downstream (pack, upload) runs if the exact binary that's about to ship
+      # can't even start. This is the thing that stops a broken build from ever reaching the
+      # release page - `set -e` (default for `run:` steps) means a nonzero exit here fails the
+      # job outright, and Velopack pack/upload steps never execute.
+      - name: Install Xvfb (Linux headless display for the smoke test)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: sudo apt-get update -y && sudo apt-get install -y xvfb xdotool squashfs-tools
+
+      - name: Smoke test Linux published binary
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          MapperDirectory: ${{ github.workspace }}/.release-mappers/dist
+        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh publish/linux-x64/Gamehook.UI
+
+      - name: Smoke test Windows published binary
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./.github/scripts/smoke-windows.ps1 -Binary publish/win-x64/Gamehook.UI.exe -MapperPath .release-mappers/dist
+
+      - name: Pack with Velopack
+        shell: bash
+        run: |
+          vpk pack \
+            --packId Gamehook \
+            --packVersion ${{ needs.resolve.outputs.version }} \
+            --packDir publish/${{ matrix.rid }} \
+            --mainExe ${{ matrix.main_exe }} \
+            --packTitle Gamehook \
+            --packAuthors Gamehook \
+            --icon src/Gamehook.UI/${{ matrix.icon }} \
+            --channel ${{ matrix.channel }} \
+            --outputDir releases/${{ matrix.rid }}
+
+      - name: Smoke test Linux AppImage
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          MapperDirectory: ${{ github.workspace }}/.release-mappers/dist
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/Gamehook.AppImage
+
+      - name: Store verified release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.channel }}
+          path: releases/${{ matrix.rid }}/
+          if-no-files-found: error
+
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+      - name: Publish verified platform assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          if existing=$(gh release view "$RELEASE_TAG" --repo "$APP_REPO_URL" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$existing" != "true" ]; then
+              echo "Refusing to overwrite an already published release: $RELEASE_TAG" >&2
+              exit 1
+            fi
+          fi
+          prerelease=false
+          for channel in win linux; do
+          vpk upload github \
+            --repoUrl "$APP_REPO_URL" \
+            --token "$GITHUB_TOKEN" \
+            --outputDir "release-assets/release-$channel" \
+            --channel "$channel" \
+            --tag "$RELEASE_TAG" \
+            --releaseName "Gamehook $RELEASE_TAG" \
+            --targetCommitish "$GITHUB_SHA" \
+            --pre "$prerelease" \
+            --merge true \
+            --publish false
+          done
+          gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"

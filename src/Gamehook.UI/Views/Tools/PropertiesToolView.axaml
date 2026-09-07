@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.UI.ViewModels"
+             xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
+             x:Class="Gamehook.UI.Views.Tools.PropertiesToolView"
+             x:DataType="tools:PropertiesToolViewModel">
+    <Border Background="{StaticResource SurfaceBrush}">
+        <Grid>
+            <StackPanel Margin="28" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        IsVisible="{Binding !Main.HasProperties}">
+                <Border Width="46" Height="46" Background="{StaticResource AccentSoftBrush}"
+                        BorderBrush="{StaticResource AccentDarkBrush}" BorderThickness="1"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="00" Foreground="#73A9E5" FontSize="15" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="No memory map loaded" FontSize="14" FontWeight="SemiBold" TextAlignment="Center" />
+                <TextBlock Text="Select mapper and save state, then load workspace."
+                           Classes="muted" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="225" />
+            </StackPanel>
+
+            <TreeView Name="Tree" Margin="0" ItemsSource="{Binding Main.Tree}" SelectedItem="{Binding Main.SelectedNode}"
+                      BorderThickness="0" Background="Transparent"
+                      ScrollViewer.AllowAutoHide="False"
+                      IsVisible="{Binding Main.HasProperties}">
+                <TreeView.ItemTemplate>
+                    <TreeDataTemplate x:DataType="vm:PropertyTreeNodeViewModel" ItemsSource="{Binding Children}">
+                        <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="18">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                       FontSize="11"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayValue}" VerticalAlignment="Center"
+                                       Margin="10,0,3,0" HorizontalAlignment="Right"
+                                       FontSize="10"
+                                       Foreground="#79AEE8" TextTrimming="CharacterEllipsis" />
+                            <Button Grid.Column="2" Classes="pin" Classes.pinned="{Binding IsPinned}"
+                                    IsVisible="{Binding IsLeaf}"
+                                    Command="{Binding TogglePinCommand}"
+                                    ToolTip.Tip="Pin/unpin property">
+                                <Path Data="M32 32C32 14.3 46.3 0 64 0H320c17.7 0 32 14.3 32 32s-14.3 32-32 32h-8.4l14.3 111.4c30.7 8.3 57.7 25.4 78.5 47.9c6.2 6.6 8.1 16.1 5 24.6s-11.5 14.5-20.6 14.5H32c-9.1 0-17.5-6-20.6-14.5s-1.2-18 5-24.6c20.8-22.5 47.8-39.6 78.5-47.9L108.4 64H64C46.3 64 32 49.7 32 32zM160 384h64v96c0 17.7-14.3 32-32 32s-32-14.3-32-32V384z"
+                                      Stretch="Uniform" Width="8" Height="8" Classes="pin-glyph" />
+                            </Button>
+                        </Grid>
+                    </TreeDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+        </Grid>
+    </Border>
+</UserControl>
