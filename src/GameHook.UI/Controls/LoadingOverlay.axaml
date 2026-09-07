@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GameHook.UI.Controls.LoadingOverlay"
+             x:Name="Root">
+    <!-- Shared spinner + message layout for waiting states. -->
+    <Border Width="300" Padding="28,24" Background="#1B1C1E" BorderBrush="#3B3E43"
+            BorderThickness="1" CornerRadius="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+            <ProgressBar IsIndeterminate="True" Height="4" />
+            <TextBlock Text="{Binding Text, ElementName=Root}" Classes="muted" FontSize="12"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="GameHook.Domain/GameHook.Domain.csproj" />
+  <Project Path="GameHook.Infrastructure/GameHook.Infrastructure.csproj" />
+  <Project Path="GameHook.Tests/GameHook.Tests.csproj" />
+  <Project Path="GameHook.UI/GameHook.UI.csproj" />
+</Solution>

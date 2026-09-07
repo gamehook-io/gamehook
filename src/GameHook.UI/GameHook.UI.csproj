@@ -1,0 +1,60 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <EnableAvaloniaXamlCompilation>true</EnableAvaloniaXamlCompilation>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <!-- Embeds the icon into the exe's Win32 resources - without this the exe (and every
+             shortcut Explorer/Start Menu/Velopack create pointing at it) shows a generic icon. -->
+        <ApplicationIcon>icon.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <!-- No console subsystem, so Windows never shows a console window at all (not even
+             briefly) unless the app explicitly AllocConsole()s one - see Program.cs. Only affects
+             the Windows PE subsystem bit; a Linux publish is unaffected and keeps writing to its
+             inherited terminal normally. -->
+        <OutputType>WinExe</OutputType>
+        <!-- Ahead-of-time native code reduces cold-start JIT work. -->
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
+        <!-- Use runtime profiles to optimize hot paths after startup. -->
+        <TieredPGO>true</TieredPGO>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\GameHook.Domain\GameHook.Domain.csproj" />
+      <ProjectReference Include="..\GameHook.Infrastructure\GameHook.Infrastructure.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Avalonia" Version="12.1.2" />
+      <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+      <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+      <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+      <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+      <PackageReference Include="Dock.Model" Version="12.1.0.6" />
+      <PackageReference Include="Dock.Model.Mvvm" Version="12.1.0.6" />
+      <PackageReference Include="Dock.Avalonia" Version="12.1.0.6" />
+      <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.6" />
+      <PackageReference Include="StaticViewLocator" Version="0.7.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <AvaloniaResource Include="icon.png" />
+      <AvaloniaResource Include="icon.ico" />
+    </ItemGroup>
+
+</Project>

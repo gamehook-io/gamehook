@@ -86,12 +86,12 @@ jobs:
           - os: windows-latest
             rid: win-x64
             channel: win
-            main_exe: Gamehook.UI.exe
+            main_exe: GameHook.UI.exe
             icon: icon.ico
           - os: ubuntu-latest
             rid: linux-x64
             channel: linux
-            main_exe: Gamehook.UI
+            main_exe: GameHook.UI
             icon: icon.png
     runs-on: ${{ matrix.os }}
     steps:
@@ -120,14 +120,14 @@ jobs:
         run: |
           jq --arg commit "${{ needs.resolve.outputs.mapper_commit }}" \
              '.Mapper.Commit = $commit | .Mapper.Source = "Proxy"' \
-             src/Gamehook.UI/appsettings.json > appsettings.tmp.json
-          mv appsettings.tmp.json src/Gamehook.UI/appsettings.json
-          cat src/Gamehook.UI/appsettings.json
+             src/GameHook.UI/appsettings.json > appsettings.tmp.json
+          mv appsettings.tmp.json src/GameHook.UI/appsettings.json
+          cat src/GameHook.UI/appsettings.json
 
       - name: Publish self-contained single-file build
         shell: bash
         run: |
-          dotnet publish src/Gamehook.UI/Gamehook.UI.csproj \
+          dotnet publish src/GameHook.UI/GameHook.UI.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
             --self-contained true \
@@ -152,24 +152,24 @@ jobs:
         shell: bash
         env:
           MapperDirectory: ${{ github.workspace }}/.release-mappers/dist
-        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh publish/linux-x64/Gamehook.UI
+        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh publish/linux-x64/GameHook.UI
 
       - name: Smoke test Windows published binary
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: ./.github/scripts/smoke-windows.ps1 -Binary publish/win-x64/Gamehook.UI.exe -MapperPath .release-mappers/dist
+        run: ./.github/scripts/smoke-windows.ps1 -Binary publish/win-x64/GameHook.UI.exe -MapperPath .release-mappers/dist
 
       - name: Pack with Velopack
         shell: bash
         run: |
           vpk pack \
-            --packId Gamehook \
+            --packId GameHook \
             --packVersion ${{ needs.resolve.outputs.version }} \
             --packDir publish/${{ matrix.rid }} \
             --mainExe ${{ matrix.main_exe }} \
-            --packTitle Gamehook \
-            --packAuthors Gamehook \
-            --icon src/Gamehook.UI/${{ matrix.icon }} \
+            --packTitle GameHook \
+            --packAuthors GameHook \
+            --icon src/GameHook.UI/${{ matrix.icon }} \
             --channel ${{ matrix.channel }} \
             --outputDir releases/${{ matrix.rid }}
 
@@ -179,16 +179,16 @@ jobs:
         env:
           MapperDirectory: ${{ github.workspace }}/.release-mappers/dist
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/Gamehook.AppImage
+        run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/GameHook.AppImage
 
-      # A copy, not a rename - Gamehook-win-Setup.exe stays put under vpk's own name (vpk upload
+      # A copy, not a rename - GameHook-win-Setup.exe stays put under vpk's own name (vpk upload
       # github needs it there), this just adds a friendlier-named extra copy of the same installer.
       - name: Copy Windows installer to a friendly name
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           mkdir -p dist/${{ matrix.rid }}
-          cp "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
+          cp "releases/${{ matrix.rid }}/GameHook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
 
       - name: Store verified release assets
         uses: actions/upload-artifact@v4
@@ -254,14 +254,14 @@ jobs:
             --outputDir "release-assets/release-$channel" \
             --channel "$channel" \
             --tag "$RELEASE_TAG" \
-            --releaseName "Gamehook $RELEASE_TAG" \
+            --releaseName "GameHook $RELEASE_TAG" \
             --targetCommitish "$GITHUB_SHA" \
             --pre "$prerelease" \
             --merge true \
             --publish false
           done
 
-          # Extra friendly-named copy of the installer, alongside vpk's own Gamehook-win-Setup.exe -
+          # Extra friendly-named copy of the installer, alongside vpk's own GameHook-win-Setup.exe -
           # both stay on the release. No --clobber needed: the fail-fast check above guarantees this
           # is always a fresh release with no prior asset under this name.
           gh release upload "$RELEASE_TAG" dist-assets/dist-win/gamehook-setup.exe --repo "$APP_REPO_URL"
