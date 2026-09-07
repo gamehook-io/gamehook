@@ -2,6 +2,5 @@
   <Project Path="Gamehook.Domain/Gamehook.Domain.csproj" />
   <Project Path="Gamehook.Infrastructure/Gamehook.Infrastructure.csproj" />
   <Project Path="Gamehook.Tests/Gamehook.Tests.csproj" />
-  <Project Path="Gamehook.TimingMetrics/Gamehook.TimingMetrics.csproj" />
   <Project Path="Gamehook.UI/Gamehook.UI.csproj" />
 </Solution>
