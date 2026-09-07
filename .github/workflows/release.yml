@@ -181,11 +181,28 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/Gamehook.AppImage
 
+      # A copy, not a rename - Gamehook-win-Setup.exe stays put under vpk's own name (vpk upload
+      # github needs it there), this just adds a friendlier-named extra copy of the same installer.
+      - name: Copy Windows installer to a friendly name
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.rid }}
+          cp "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
+
       - name: Store verified release assets
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.channel }}
           path: releases/${{ matrix.rid }}/
+          if-no-files-found: error
+
+      - name: Store friendly-named installer copy
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.channel }}
+          path: dist/${{ matrix.rid }}/
           if-no-files-found: error
 
   publish:
@@ -201,6 +218,10 @@ jobs:
         with:
           pattern: release-*
           path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist-assets
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
       - name: Publish verified platform assets
@@ -239,5 +260,10 @@ jobs:
             --merge true \
             --publish false
           done
+
+          # Extra friendly-named copy of the installer, alongside vpk's own Gamehook-win-Setup.exe -
+          # both stay on the release. No --clobber needed: the fail-fast check above guarantees this
+          # is always a fresh release with no prior asset under this name.
+          gh release upload "$RELEASE_TAG" dist-assets/dist-win/gamehook-setup.exe --repo "$APP_REPO_URL"
 
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"
