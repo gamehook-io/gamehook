@@ -34,7 +34,7 @@ public sealed class AppUpdateStatusProvider
         Set(new AppUpdateStatus(AppUpdateState.Downloading, version, $"Downloading Gamehook {version}...", DateTimeOffset.UtcNow));
 
     public void SetReadyToApply(string version) =>
-        Set(new AppUpdateStatus(AppUpdateState.ReadyToApply, version, $"Gamehook {version} is ready. Restart to update.", DateTimeOffset.UtcNow));
+        Set(new AppUpdateStatus(AppUpdateState.ReadyToApply, version, $"Gamehook {version} is ready and will apply next time you restart Gamehook.", DateTimeOffset.UtcNow));
 
     public void SetFailed(string message) => Set(new AppUpdateStatus(AppUpdateState.Failed, null, message, DateTimeOffset.UtcNow));
 

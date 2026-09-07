@@ -61,6 +61,17 @@ public sealed class AppUpdateService(
                 return;
             }
 
+            // A prior session downloaded an update but the user never hit "Restart to Update" (or
+            // just closed the app) - apply it now, before the window is created, so closing and
+            // reopening Gamehook is all it takes. This runs during host.Start(), so exiting here
+            // means the user never sees the old version's window at all.
+            if (um.UpdatePendingRestart is { } pendingRestart)
+            {
+                logger.LogInformation("Applying pending Gamehook update {Version} and restarting.", pendingRestart.Version);
+                um.ApplyUpdatesAndRestart(pendingRestart);
+                return;
+            }
+
             logger.LogInformation("Checking {FeedUrl} for app updates.", feedUrl ?? UpdateSourceFactory.RepositoryUrl);
             var updateInfo = await um.CheckForUpdatesAsync()
                 .WaitAsync(TimeSpan.FromSeconds(20), cancellationToken).ConfigureAwait(false);
