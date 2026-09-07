@@ -4,9 +4,6 @@ name: Release
 # Mapper tests use the exact commit written into the bundled configuration.
 # App updates consume these GitHub Releases unless a custom HTTPS feed is configured.
 on:
-  push:
-    tags:
-      - "??.??.*"
   workflow_dispatch:
     inputs:
       version:
