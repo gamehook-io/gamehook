@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GameHook WebSocket Viewer</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; background: #111; color: #ddd; }
+  #bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+  input { flex: 1; padding: 0.4rem; background: #222; color: #ddd; border: 1px solid #444; }
+  button { padding: 0.4rem 0.8rem; cursor: pointer; }
+  #status { font-size: 0.85rem; }
+  #status.connected { color: #6f6; }
+  #status.disconnected { color: #f66; }
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid #333; }
+  th { color: #999; }
+  tr.flash { animation: flash 1s ease-out; }
+  @keyframes flash { from { background: #345; } to { background: transparent; } }
+  #log { margin-top: 1rem; height: 10rem; overflow-y: auto; background: #000; padding: 0.5rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: #888; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <input id="url" value="ws://127.0.0.1:8085/ws">
+    <button id="connect">Connect</button>
+    <span id="status" class="disconnected">disconnected</span>
+  </div>
+
+  <table>
+    <thead><tr><th>path</th><th>value</th><th>bytes</th><th>last updated</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div id="log"></div>
+
+<script>
+  const rowsEl = document.getElementById('rows');
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const urlEl = document.getElementById('url');
+  const rowByPath = new Map();
+  let socket = null;
+
+  function log(msg) {
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.prepend(line);
+  }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls;
+  }
+
+  function bytesToHex(bytes) {
+    return (bytes || []).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  }
+
+  function upsertRow(change) {
+    let row = rowByPath.get(change.path);
+    if (!row) {
+      row = document.createElement('tr');
+      row.innerHTML = '<td class="path"></td><td class="value"></td><td class="bytes"></td><td class="time"></td>';
+      rowByPath.set(change.path, row);
+      rowsEl.appendChild(row);
+    }
+    row.querySelector('.path').textContent = change.path;
+    row.querySelector('.value').textContent = JSON.stringify(change.value);
+    row.querySelector('.bytes').textContent = bytesToHex(change.bytes);
+    row.querySelector('.time').textContent = new Date().toLocaleTimeString();
+    row.classList.remove('flash');
+    void row.offsetWidth; // restart animation
+    row.classList.add('flash');
+  }
+
+  function connect() {
+    if (socket) socket.close();
+    const url = urlEl.value.trim();
+    socket = new WebSocket(url);
+
+    socket.onopen = () => { setStatus('connected', 'connected'); log(`connected to ${url}`); };
+    socket.onclose = () => { setStatus('disconnected', 'disconnected'); log('disconnected'); };
+    socket.onerror = () => { log('socket error'); };
+    socket.onmessage = (event) => {
+      let changes;
+      try { changes = JSON.parse(event.data); }
+      catch (err) { log(`bad message: ${err}`); return; }
+      for (const change of changes) upsertRow(change);
+    };
+  }
+
+  document.getElementById('connect').addEventListener('click', connect);
+  urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+  connect();
+</script>
+</body>
+</html>

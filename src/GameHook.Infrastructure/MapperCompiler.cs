@@ -164,7 +164,8 @@ internal sealed class MapperCompiler
             (string?)element.Attribute("reference"),
             (string?)element.Attribute("value"),
             (string?)element.Attribute("characterMap"),
-            memoryContainer);
+            memoryContainer,
+            (string?)element.Attribute("description"));
 
         var property = Property.Create(config, system.IntegerEndianness, system);
 

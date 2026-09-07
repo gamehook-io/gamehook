@@ -14,7 +14,8 @@ public readonly record struct PropertyConfig(
     string? Reference,
     string? StaticValue,
     string? CharacterMap = null,
-    string? MemoryContainer = null);
+    string? MemoryContainer = null,
+    string? Description = null);
 
 public abstract class Property : IProperty
 {
@@ -63,6 +64,7 @@ public abstract class Property : IProperty
         StaticValue = config.StaticValue;
         CharacterMap = config.CharacterMap;
         MemoryContainer = config.MemoryContainer;
+        Description = config.Description;
         IntegerEndianness = integerEndianness;
         this.system = system;
         CompileBits(config.Bits);
@@ -76,6 +78,7 @@ public abstract class Property : IProperty
     public string? Reference { get; private set; }
     public string? StaticValue { get; }
     public string? CharacterMap { get; }
+    public string? Description { get; }
 
     /// Name of a script-populated virtual buffer (Mapper.memory.fill) this property reads from
     /// instead of live device memory; when set, Address is a relative offset into that buffer.

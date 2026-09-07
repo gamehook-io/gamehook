@@ -9,7 +9,7 @@
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding WindowTitle}"
         Icon="/icon.ico"
-        Width="1600" Height="900" MinWidth="900" MinHeight="560"
+        Width="1600" Height="900" MinWidth="640" MinHeight="360"
         CanResize="True"
         WindowDecorations="None"
         Background="{StaticResource AppBackgroundBrush}"
@@ -227,17 +227,6 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
-        <Style Selector="Border.setup-card">
-            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="6" />
-        </Style>
-        <Style Selector="Border.setup-side-panel">
-            <Setter Property="Background" Value="#18283A" />
-            <Setter Property="BorderBrush" Value="#315A82" />
-            <Setter Property="BorderThickness" Value="0,0,1,0" />
-        </Style>
     </Window.Styles>
 
     <Border BorderBrush="#4A4D52" BorderThickness="1">
@@ -276,6 +265,10 @@
                             <Separator />
                             <MenuItem Header="Exit" Click="ExitMenuItem_Click" />
                         </MenuItem>
+                        <MenuItem Header="API">
+                            <MenuItem x:Name="ApiDocumentationMenuItem" Header="Open API Documentation"
+                                      Click="ApiDocumentationMenuItem_Click" />
+                        </MenuItem>
                         <MenuItem Header="Help">
                             <MenuItem Header="About GameHook" Click="AboutMenuItem_Click" />
                         </MenuItem>
@@ -291,75 +284,70 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="2" IsVisible="{Binding IsLoadScreenVisible}" Margin="32">
-                <Border Classes="setup-card" Width="1080" Height="560"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Grid ColumnDefinitions="275,*">
-                        <Border Grid.Column="0" Classes="setup-side-panel">
-                            <Grid RowDefinitions="Auto,*,Auto" Margin="28">
-                                <StackPanel Spacing="14">
-                                    <Image Source="/icon.png" Width="48" Height="48"
-                                           HorizontalAlignment="Left" />
-                                    <TextBlock Text="GameHook" FontSize="25" FontWeight="SemiBold" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
+            <Grid Grid.Row="2" IsVisible="{Binding IsLoadScreenVisible}">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="640" Margin="20" Spacing="20" HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                            <Image Source="/icon.png" Width="28" Height="28" />
+                            <TextBlock Text="GameHook" FontSize="18" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
 
-                        <Grid Grid.Column="1" Margin="36,32" RowDefinitions="Auto,Auto,Auto,*,Auto">
-                            <StackPanel Grid.Row="0" Spacing="7" Margin="0,0,0,34">
-                                <TextBlock Text="DRIVER" Classes="eyebrow" />
-                                <ComboBox HorizontalAlignment="Stretch" MinWidth="560"
-                                          ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
-                                          PlaceholderText="Select a driver...">
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="DRIVER" Classes="eyebrow" />
+                            <ComboBox HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
+                                      PlaceholderText="Select a driver...">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DriverChoice">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="Where GameHook reads memory from." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7" IsVisible="{Binding IsSaveStateDriver}">
+                            <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding SelectedSaveStatePath}"
+                                         PlaceholderText="No file selected" IsReadOnly="True"
+                                         Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}"
+                                         Padding="8,6" />
+                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                        Click="BrowseSaveStateButton_Click" />
+                            </Grid>
+                            <TextBlock Text="Select a save-state file from your computer." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="MAPPER" Classes="eyebrow" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
+                                          PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}">
                                     <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:DriverChoice">
+                                        <DataTemplate x:DataType="vm:MapperChoice">
                                             <TextBlock Text="{Binding DisplayName}" />
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <TextBlock Text="Where GameHook reads memory from." Classes="muted" FontSize="11" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="1" Spacing="7" Margin="0,0,0,20" IsVisible="{Binding IsSaveStateDriver}">
-                                <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                    <TextBox Grid.Column="0" Text="{Binding SelectedSaveStatePath}"
-                                             PlaceholderText="No file selected" IsReadOnly="True"
-                                             Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                             Padding="8,6" />
-                                    <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
-                                            Click="BrowseSaveStateButton_Click" />
-                                </Grid>
-                                <TextBlock Text="Select a save-state file from your computer." Classes="muted" FontSize="11" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="2" Spacing="7">
-                                <TextBlock Text="MAPPER" Classes="eyebrow" />
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                    <ComboBox Grid.Column="0" HorizontalAlignment="Stretch" MinWidth="520"
-                                              ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
-                                              PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:MapperChoice">
-                                                <TextBlock Text="{Binding DisplayName}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
-                                            IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
-                                </Grid>
-                                <TextBlock Text="Maps game memory to valid property fields." Classes="muted" FontSize="11" />
-                            </StackPanel>
-
-                            <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,20,0,0" VerticalAlignment="Bottom">
-                                <SelectableTextBlock Grid.Column="0" Text="{Binding Status}" Classes="error"
-                                                      VerticalAlignment="Center" IsVisible="{Binding HasError}" />
-                                <Button Grid.Column="1" Content="Load" Command="{Binding LoadCommand}"
-                                        Classes="action" Width="110" />
+                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                        IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
                             </Grid>
+                            <TextBlock Text="Maps game memory to valid property fields." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <SelectableTextBlock Grid.Column="0" Text="{Binding Status}" Classes="error"
+                                                  VerticalAlignment="Center" TextWrapping="Wrap"
+                                                  IsVisible="{Binding HasError}" />
+                            <Button Grid.Column="1" Content="Load" Command="{Binding LoadCommand}"
+                                    Classes="action" Width="110" />
                         </Grid>
-                    </Grid>
-                </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Grid Grid.Row="2" IsVisible="{Binding IsConnecting}">
@@ -387,21 +375,25 @@
                 </StackPanel>
             </Grid>
 
-            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left"
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeWest_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Right"
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeEast_PointerPressed" />
-            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Top"
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeNorth_PointerPressed" />
-            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Bottom"
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeSouth_PointerPressed" />
             <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Cursor="TopLeftCorner"
                     Background="Transparent" PointerPressed="ResizeNorthWest_PointerPressed" />
             <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Cursor="TopRightCorner"
                     Background="Transparent" PointerPressed="ResizeNorthEast_PointerPressed" />
             <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Cursor="BottomLeftCorner"
                     Background="Transparent" PointerPressed="ResizeSouthWest_PointerPressed" />
             <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Cursor="BottomRightCorner"
                     Background="Transparent" PointerPressed="ResizeSouthEast_PointerPressed" />
         </Grid>
     </Border>

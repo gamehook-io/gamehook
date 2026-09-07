@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using GameHook.Domain;
 using GameHook.Infrastructure.AppUpdate;
 using GameHook.UI.ViewModels;
 using GameHook.UI.Views;
@@ -22,7 +23,15 @@ public partial class App : Application
         {
             var viewModel = Services.GetRequiredService<MainWindowViewModel>();
             var logger = Services.GetRequiredService<ILogger<App>>();
-            desktop.MainWindow = new MainWindow { DataContext = viewModel };
+            var mainWindow = new MainWindow { DataContext = viewModel };
+            desktop.MainWindow = mainWindow;
+
+            // The API host already logged/swallowed a bind failure so app startup isn't blocked
+            // by it; surface it here once the window actually exists so it has an owner to center on.
+            if (Services.GetRequiredService<ApiBindStatus>().Error is { } bindError)
+            {
+                mainWindow.Opened += (_, _) => _ = new AlertWindow("GameHook", bindError).ShowDialog(mainWindow);
+            }
 
 #if !DEBUG
             // A deliberate early exit is not a failed launch.

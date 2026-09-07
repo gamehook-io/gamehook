@@ -70,6 +70,7 @@ public sealed class HexEditorView : Control
     private readonly HashSet<IProperty> pinnedProperties = [];
     private readonly TextBlock tooltipName = new() { Foreground = new SolidColorBrush(Color.Parse("#E3E6EB")), FontWeight = FontWeight.SemiBold };
     private readonly TextBlock tooltipValue = new() { Foreground = new SolidColorBrush(Color.Parse("#82B8F2")), FontFamily = new FontFamily("Consolas,Menlo,monospace") };
+    private readonly TextBlock tooltipDescription = new() { Foreground = new SolidColorBrush(Color.Parse("#9AA4B2")), TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
 
     public ReadOnlyMemory<byte> Bytes
     {
@@ -156,7 +157,7 @@ public sealed class HexEditorView : Control
         ToolTip.SetTip(this, new StackPanel
         {
             Spacing = 2,
-            Children = { tooltipName, tooltipValue },
+            Children = { tooltipName, tooltipValue, tooltipDescription },
         });
         ToolTip.SetPlacement(this, PlacementMode.Pointer);
         ToolTip.SetServiceEnabled(this, false);
@@ -461,7 +462,8 @@ public sealed class HexEditorView : Control
         bytes = array;
         InvalidateVisual();
 
-        ByteEditRequested?.Invoke(this, new HexByteEditRequested(regionId, address, originalValue, newValue));
+        var owner = offset < byteOwners.Length ? byteOwners[offset] : null;
+        ByteEditRequested?.Invoke(this, new HexByteEditRequested(regionId, address, originalValue, newValue, owner));
     }
 
     private void CancelEdit()
@@ -760,6 +762,8 @@ public sealed class HexEditorView : Control
 
         tooltipName.Text = property.Name;
         tooltipValue.Text = $"Value: {FormatValue(property.Value)}";
+        tooltipDescription.Text = property.Description;
+        tooltipDescription.IsVisible = !string.IsNullOrEmpty(property.Description);
     }
 
     private static string FormatValue(object? value) => value switch
@@ -785,4 +789,4 @@ public sealed class HexEditorView : Control
 
 public sealed record HexSelection(string RegionId, ulong StartingAddress, ReadOnlyMemory<byte> Bytes);
 
-public sealed record HexByteEditRequested(string RegionId, ulong Address, byte OriginalValue, byte NewValue);
+public sealed record HexByteEditRequested(string RegionId, ulong Address, byte OriginalValue, byte NewValue, IProperty? Owner);

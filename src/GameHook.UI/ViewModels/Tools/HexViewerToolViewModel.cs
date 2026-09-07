@@ -8,19 +8,33 @@ namespace GameHook.UI.ViewModels.Tools;
 public sealed class HexViewerToolViewModel : Tool
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(250);
+
+    // Delay before the loading spinner appears once a region has no bytes yet - reads normally
+    // land within a poll or two, so showing it immediately would just flicker on every region switch.
+    private static readonly TimeSpan LoadingSpinnerDelay = TimeSpan.FromSeconds(1);
+
     public MainWindowViewModel Main { get; }
     public ReadOnlyMemory<byte> Bytes { get; private set; }
     public ulong StartingAddress { get; private set; }
     public int RefreshToken { get; private set; }
+    public bool ShowLoadingSpinner { get; private set; }
     private Task? pendingRead;
     private DateTimeOffset lastReadStarted;
     private string? displayedRegion;
+    private readonly DispatcherTimer loadingSpinnerTimer;
 
     public HexViewerToolViewModel(MainWindowViewModel main)
     {
         Main = main;
         Id = "HexViewer";
         Title = "Hex Viewer";
+        loadingSpinnerTimer = new DispatcherTimer { Interval = LoadingSpinnerDelay };
+        loadingSpinnerTimer.Tick += (_, _) =>
+        {
+            loadingSpinnerTimer.Stop();
+            ShowLoadingSpinner = true;
+            OnPropertyChanged(nameof(ShowLoadingSpinner));
+        };
     }
 
     public Task RefreshAsync(bool force = false)
@@ -77,6 +91,12 @@ public sealed class HexViewerToolViewModel : Tool
         {
             if (!ReferenceEquals(driver, Main.HexDriver) || !ReferenceEquals(system, Main.HexSystem)
                 || regionId != Main.SelectedRegionId) return;
+            loadingSpinnerTimer.Stop();
+            if (ShowLoadingSpinner)
+            {
+                ShowLoadingSpinner = false;
+                OnPropertyChanged(nameof(ShowLoadingSpinner));
+            }
             Bytes = snapshot.Bytes;
             StartingAddress = snapshot.StartingAddress;
             RefreshToken++;
@@ -101,5 +121,13 @@ public sealed class HexViewerToolViewModel : Tool
         OnPropertyChanged(nameof(Bytes));
         OnPropertyChanged(nameof(StartingAddress));
         OnPropertyChanged(nameof(RefreshToken));
+
+        loadingSpinnerTimer.Stop();
+        if (ShowLoadingSpinner)
+        {
+            ShowLoadingSpinner = false;
+            OnPropertyChanged(nameof(ShowLoadingSpinner));
+        }
+        loadingSpinnerTimer.Start();
     }
 }

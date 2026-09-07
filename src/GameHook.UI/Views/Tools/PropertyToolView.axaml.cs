@@ -27,6 +27,22 @@ public partial class PropertyToolView : UserControl
         }
     }
 
+    private async void SaveRawBytesButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is PropertyToolViewModel inspector)
+        {
+            await inspector.SubmitRawBytesEditAsync();
+        }
+    }
+
+    private void CancelRawBytesButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is PropertyToolViewModel inspector)
+        {
+            inspector.CancelRawBytesEdit();
+        }
+    }
+
     internal static void FloatInspector(PropertyToolViewModel inspector, Control source)
     {
         if (!inspector.HasSelectedProperty && !inspector.HasSelection)

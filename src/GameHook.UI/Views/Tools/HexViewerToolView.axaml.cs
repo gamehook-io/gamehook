@@ -44,6 +44,18 @@ public partial class HexViewerToolView : UserControl
             if (!success)
             {
                 HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
+                return;
+            }
+
+            // Raw pokes bypass property encoding, so the owning property (if any) never gets
+            // ApplyWrittenBytes from WriteAsync/SubmitRawBytesEditAsync - do it here, same as those
+            // paths, so the property tree/inspector don't show a stale value until the next poll.
+            if (edit.Owner is { Address: { } ownerAddress } owner && edit.Address >= ownerAddress
+                && edit.Address - ownerAddress < (ulong)owner.Bytes.Length)
+            {
+                var ownerBytes = owner.Bytes.ToArray();
+                ownerBytes[edit.Address - ownerAddress] = edit.NewValue;
+                owner.ApplyWrittenBytes(ownerBytes, mapper.References);
             }
         };
         DataContextChanged += (_, _) => UpdateSubscription();

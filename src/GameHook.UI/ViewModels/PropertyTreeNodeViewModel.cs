@@ -15,6 +15,20 @@ public sealed partial class PropertyTreeNodeViewModel(string name, IProperty? pr
     public string Name { get; } = name;
     public IProperty? Property { get; } = property;
     public bool IsLeaf => Property is not null;
+    public string? Description => Property?.Description;
+    public bool HasDescription => !string.IsNullOrEmpty(Description);
+
+    // Address-less leaves are never backed by device memory - either a fixed constant (StaticValue)
+    // or a value a mapper script computes/assigns at read time. Neither can be located in the hex
+    // viewer or written to raw, so the tree flags them instead of leaving that unexplained.
+    public bool HasNoAddress => IsLeaf && Property!.Address is null;
+    public string? NoAddressTooltip => !HasNoAddress ? null : Property!.StaticValue is not null
+        ? "Constant value defined by the mapper, not read from device memory."
+        : "Computed by the mapper's script, not read from a fixed address.";
+
+    // The info bubble icon is shared: it appears for either a mapper-authored Description or a
+    // no-address note (or both stacked), rather than each getting its own icon in the row.
+    public bool HasInfoBubble => HasDescription || HasNoAddress;
     public ObservableCollection<PropertyTreeNodeViewModel> Children { get; } = [];
 
     // Bound TwoWay to TreeViewItem.IsExpanded so a single click anywhere on the row

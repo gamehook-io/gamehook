@@ -51,7 +51,25 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
     [ObservableProperty]
     private ObservableCollection<BitValueViewModel> bitValues = [];
 
+    [ObservableProperty]
+    private ObservableCollection<RawByteEditViewModel> rawByteEdits = [];
+
+    [ObservableProperty]
+    private string? rawBytesEditError;
+
+    public bool HasRawBytesEditError => RawBytesEditError is not null;
+
+    partial void OnRawBytesEditErrorChanged(string? value) => OnPropertyChanged(nameof(HasRawBytesEditError));
+
+    private string lastSubmittedRawBytesFingerprint = "";
+    private ObservableCollection<RawByteEditViewModel>? observedRawByteEdits;
+
+    public bool IsStaticValue => ActiveNode?.Property?.StaticValue is not null;
+
     private bool CanWriteValue => ActiveNode?.Property is { Address: not null, MemoryContainer: null };
+    public bool HasRawBytes => RawByteEdits.Count > 0;
+    public bool CanEditRawBytes => CanWriteValue;
+    public bool HasPendingRawBytesEdit => CanEditRawBytes && RawBytesFingerprint() != lastSubmittedRawBytesFingerprint;
     public bool CanEditReference => CanWriteValue && HasReferenceValues;
     public bool CanEditBoolean => CanWriteValue && !HasReferenceValues && ActiveNode?.Property?.Type == "bool";
     public bool CanEditNumber => CanWriteValue && !HasReferenceValues &&
@@ -79,6 +97,25 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         RefreshValueEditState();
     }
 
+    partial void OnRawByteEditsChanged(ObservableCollection<RawByteEditViewModel> value)
+    {
+        if (observedRawByteEdits is not null)
+        {
+            foreach (var cell in observedRawByteEdits) cell.PropertyChanged -= OnRawByteEditChanged;
+        }
+        observedRawByteEdits = value;
+        foreach (var cell in value) cell.PropertyChanged += OnRawByteEditChanged;
+        OnPropertyChanged(nameof(HasPendingRawBytesEdit));
+        OnPropertyChanged(nameof(HasRawBytes));
+    }
+
+    private void OnRawByteEditChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RawByteEditViewModel.Text)) OnPropertyChanged(nameof(HasPendingRawBytesEdit));
+    }
+
+    private string RawBytesFingerprint() => string.Concat(RawByteEdits.Select(cell => cell.Text.Trim().ToUpperInvariant()));
+
     // Edits are deliberately staged. Device memory changes only when user explicitly presses Save.
     public async Task SubmitEditAsync()
     {
@@ -104,6 +141,48 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
     {
         LoadEditorValues();
         EditError = null;
+    }
+
+    // Bypasses property decoding entirely - writes exactly the typed bytes to the property's own
+    // address, the same raw poke the hex editor uses. Still refreshes the property's decoded Value
+    // from those bytes afterward, so the VALUE section above doesn't go stale until the next poll.
+    public async Task SubmitRawBytesEditAsync()
+    {
+        if (ActiveNode?.Property is not { } property || Main.Mapper is not { } mapper) return;
+        if (property.BuildRequest() is not { } request)
+        {
+            RawBytesEditError = "This property is not backed by device memory and cannot be written.";
+            return;
+        }
+
+        var bytes = new byte[RawByteEdits.Count];
+        for (var i = 0; i < RawByteEdits.Count; i++)
+        {
+            if (!RawByteEdits[i].TryGetByte(out var value))
+            {
+                RawBytesEditError = $"Byte {i} is not valid hex.";
+                return;
+            }
+            bytes[i] = value;
+        }
+
+        var fingerprint = RawBytesFingerprint();
+        if (fingerprint == lastSubmittedRawBytesFingerprint) return;
+
+        var (success, error) = await mapper.WriteRawBytesAsync(request.RegionId, request.StartingAddress, bytes).ConfigureAwait(true);
+        RawBytesEditError = success ? null : error;
+        if (success)
+        {
+            property.ApplyWrittenBytes(bytes, mapper.References);
+            lastSubmittedRawBytesFingerprint = fingerprint;
+            OnPropertyChanged(nameof(HasPendingRawBytesEdit));
+        }
+    }
+
+    public void CancelRawBytesEdit()
+    {
+        LoadEditorValues();
+        RawBytesEditError = null;
     }
 
     // A replacement inspector starts blank even though the property that was floated remains
@@ -226,6 +305,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(HasSelectedProperty));
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(IsStaticValue));
         UpdateReferenceValues();
         OnPropertyChanged(nameof(CanEditReference));
         OnPropertyChanged(nameof(CanEditBoolean));
@@ -234,8 +314,10 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(CanEditBitArray));
         OnPropertyChanged(nameof(HasEditableValue));
         OnPropertyChanged(nameof(ShowReadOnlyValue));
+        OnPropertyChanged(nameof(CanEditRawBytes));
         LoadEditorValues();
         EditError = null;
+        RawBytesEditError = null;
     }
 
     private void UpdateReferenceValues()
@@ -254,7 +336,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         var value = property?.Value;
         EditValueText = value?.ToString() ?? "";
         EditBooleanValue = value is bool booleanValue ? booleanValue : null;
-        EditNumberValue = property?.Type is "int" or "uint" or "binaryCodedDecimal" && value is not null
+        EditNumberValue = property?.Type is "int" or "uint" or "binaryCodedDecimal" && value is not null && !HasReferenceValues
             ? Convert.ToDecimal(value, CultureInfo.InvariantCulture)
             : null;
         BitValues = value is bool[] bits
@@ -262,6 +344,15 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
             : [];
         lastSubmittedFingerprint = GetEditedValue(ActiveNode?.Property?.Type).Fingerprint;
         RefreshValueEditState();
+
+        RawByteEdits = property is not null
+            ? new ObservableCollection<RawByteEditViewModel>(property.Bytes.ToArray().Select(b => new RawByteEditViewModel(b)))
+            : [];
+        // OnRawByteEditsChanged (fired synchronously by the assignment above) already raised
+        // HasPendingRawBytesEdit once, but against the *previous* fingerprint - refresh again now
+        // that it's caught up, or Save/Cancel would render enabled until the next unrelated change.
+        lastSubmittedRawBytesFingerprint = RawBytesFingerprint();
+        OnPropertyChanged(nameof(HasPendingRawBytesEdit));
     }
 
     private void OnBitValueChanged(object? sender, PropertyChangedEventArgs e)
@@ -294,6 +385,10 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         {
             foreach (var bit in observedBitValues) bit.PropertyChanged -= OnBitValueChanged;
         }
+        if (observedRawByteEdits is not null)
+        {
+            foreach (var cell in observedRawByteEdits) cell.PropertyChanged -= OnRawByteEditChanged;
+        }
         Main.PropertyChanged -= OnMainPropertyChanged;
         Main.RawSelectionUpdated -= OnRawSelectionUpdated;
     }
@@ -305,4 +400,14 @@ public sealed partial class BitValueViewModel(int index, bool isSet) : Observabl
 
     [ObservableProperty]
     private bool isSet = isSet;
+}
+
+// One hex-editor-style byte cell in the raw bytes strip. Text is kept as free-typed hex (validated/
+// clamped on the way out, not on every keystroke) so a mid-edit "1" isn't stomped back to "01".
+public sealed partial class RawByteEditViewModel(byte value) : ObservableObject
+{
+    [ObservableProperty]
+    private string text = value.ToString("X2", CultureInfo.InvariantCulture);
+
+    public bool TryGetByte(out byte value) => byte.TryParse(Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
 }

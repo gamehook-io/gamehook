@@ -7,6 +7,8 @@ namespace GameHook.Domain;
 // Owns the connect/poll/read state machine shared by every host (Avalonia UI, ConsoleUI, and any
 // future REST API): load a mapper+driver, poll it on an interval, and surface read failures,
 // driver connection drops, and missing-region data warnings as plain state a host can bind to.
+public sealed record PropertyChange(string Path, object? Value, byte[] Bytes);
+
 public sealed class GameHookSession : IDisposable
 {
     private readonly IMapperFactory mapperFactory;
@@ -38,6 +40,14 @@ public sealed class GameHookSession : IDisposable
     // or the driver's memory layout changed) - the signal a host needs to rebuild a property tree
     // rather than just refresh displayed values.
     public event Action? PropertiesReloaded;
+
+    // Fires after every successful read tick with only the properties whose value/bytes changed
+    // since the previous tick (empty on a tick with no changes; not fired at all on a failed read).
+    // A websocket (or any other push transport) subscribes to this instead of re-diffing Properties
+    // itself on a timer.
+    public event Action<IReadOnlyList<PropertyChange>>? PropertiesChanged;
+
+    private Dictionary<string, (object? Value, byte[] Bytes)> lastSnapshot = new(StringComparer.Ordinal);
 
     public GameHookSession(IMapperFactory mapperFactory, IDriverFactory driverFactory, ILogger<GameHookSession>? logger = null)
     {
@@ -153,6 +163,11 @@ public sealed class GameHookSession : IDisposable
 
             Status = $"Read in {activeMapper.LastReadMetrics.Total.TotalMilliseconds:0.##} ms";
             PropertiesReloaded?.Invoke();
+            if (PropertiesChanged is { } handler)
+            {
+                var changes = ComputePropertyChanges(activeMapper);
+                if (changes.Count > 0) handler.Invoke(changes);
+            }
             Changed?.Invoke();
             return true;
         }
@@ -199,6 +214,7 @@ public sealed class GameHookSession : IDisposable
         StopPolling();
         DisposeHexDriver();
         UnloadFailedMapper();
+        lastSnapshot = new(StringComparer.Ordinal);
         IsConnecting = false;
         DataWarning = null;
         ConnectionWarning = null;
@@ -209,6 +225,31 @@ public sealed class GameHookSession : IDisposable
     private static string FormatExceptionStatus(Exception ex) => ex is TimeoutException
         ? $"Error: {ex.Message} Is RetroArch running with Network Commands enabled?"
         : $"Error: {ex.Message}";
+
+    // Diffs the mapper's current property values/bytes against the previous tick's snapshot.
+    // lastSnapshot is replaced wholesale each tick (not mutated in place) so a property removed by
+    // a mapper reload can't linger and get reported as "changed" against a stale entry.
+    private List<PropertyChange> ComputePropertyChanges(IMapper mapper)
+    {
+        var snapshot = new Dictionary<string, (object? Value, byte[] Bytes)>(mapper.Properties.Count, StringComparer.Ordinal);
+        var changes = new List<PropertyChange>();
+
+        foreach (var (path, property) in mapper.Properties)
+        {
+            var bytes = property.Bytes.ToArray();
+            var entry = (property.Value, bytes);
+            snapshot[path] = entry;
+
+            if (!lastSnapshot.TryGetValue(path, out var previous) ||
+                !Equals(previous.Value, entry.Value) || !previous.Bytes.AsSpan().SequenceEqual(bytes))
+            {
+                changes.Add(new PropertyChange(path, entry.Value, bytes));
+            }
+        }
+
+        lastSnapshot = snapshot;
+        return changes;
+    }
 
     private static string? ComputeDataWarning(IMapper mapper)
     {

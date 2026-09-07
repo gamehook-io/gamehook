@@ -25,7 +25,7 @@
                       IsVisible="{Binding Main.HasProperties}">
                 <TreeView.ItemTemplate>
                     <TreeDataTemplate x:DataType="vm:PropertyTreeNodeViewModel" ItemsSource="{Binding Children}">
-                        <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="18">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" MinHeight="18">
                             <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
                                        FontSize="11"
                                        TextTrimming="CharacterEllipsis" />
@@ -33,7 +33,27 @@
                                        Margin="10,0,3,0" HorizontalAlignment="Right"
                                        FontSize="10"
                                        Foreground="#79AEE8" TextTrimming="CharacterEllipsis" />
-                            <Button Grid.Column="2" Classes="pin" Classes.pinned="{Binding IsPinned}"
+                            <!-- One shared info bubble: mapper Description and/or a no-address note
+                                 (StaticValue or script-computed leaves aren't backed by device memory),
+                                 stacked in the same tooltip rather than a second icon in the row. -->
+                            <Path Grid.Column="2"
+                                  Data="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"
+                                  Stretch="Uniform" Width="10" Height="10" Fill="#7F9DC0"
+                                  VerticalAlignment="Center" Margin="6,0,0,0"
+                                  IsVisible="{Binding HasInfoBubble}"
+                                  ToolTip.ShowDelay="0">
+                                <ToolTip.Tip>
+                                    <StackPanel Spacing="4" MaxWidth="260">
+                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                   IsVisible="{Binding HasDescription}" />
+                                        <TextBlock Text="{Binding NoAddressTooltip}" TextWrapping="Wrap"
+                                                   IsVisible="{Binding HasNoAddress}"
+                                                   FontStyle="Italic" FontWeight="Light"
+                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                    </StackPanel>
+                                </ToolTip.Tip>
+                            </Path>
+                            <Button Grid.Column="3" Classes="pin" Classes.pinned="{Binding IsPinned}"
                                     IsVisible="{Binding IsLeaf}"
                                     Command="{Binding TogglePinCommand}"
                                     ToolTip.Tip="Pin/unpin property">

@@ -10,6 +10,7 @@ public interface IProperty
     string? Reference { get; }
     string? StaticValue { get; }
     string? CharacterMap { get; }
+    string? Description { get; }
 
     /// Name of a script-populated virtual buffer this property reads from instead of live device
     /// memory; when set, Address is a relative offset into that buffer.

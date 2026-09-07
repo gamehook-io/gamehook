@@ -4,12 +4,15 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using GameHook.Domain;
 using GameHook.Infrastructure.MapperUpdate;
 using GameHook.Infrastructure.AppUpdate;
 using GameHook.UI.ViewModels;
 using GameHook.UI.ViewModels.Tools;
 using GameHook.UI.Views.Tools;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 
 namespace GameHook.UI.Views;
 
@@ -30,6 +33,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         UpdateMaximizeRestoreIcon();
+
+        // Set once during host startup (see GameHookApiHostedService) before any window opens -
+        // no event needed, just read it here. A bind failure means nothing is listening on
+        // ApiPort at all, so the docs link would just 404/refuse - disable it instead.
+        if (App.Services.GetRequiredService<ApiBindStatus>().Error is not null)
+        {
+            ApiDocumentationMenuItem.IsEnabled = false;
+            ToolTip.SetTip(ApiDocumentationMenuItem, "REST API failed to start - see the startup warning for details.");
+        }
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -205,5 +217,15 @@ public partial class MainWindow : Window
         await new AboutWindow(mapperUpdateService,
             App.Services.GetService<AppUpdateStatusProvider>(),
             App.Services.GetService<AppUpdateService>()).ShowDialog(this);
+    }
+
+    // Scalar serves the OpenAPI reference at "/" on the REST API's own Kestrel port (see
+    // GameHookApiHostedService) - same port whether or not the bind actually succeeded, so this
+    // just opens it and lets the browser show its own connection-refused page on failure (the
+    // startup AlertWindow in App.axaml.cs already surfaces a bind failure up front).
+    private void ApiDocumentationMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var port = App.Services.GetRequiredService<IConfiguration>().GetValue("ApiPort", 8085);
+        Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}/") { UseShellExecute = true });
     }
 }

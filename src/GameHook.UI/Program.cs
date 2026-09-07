@@ -65,6 +65,9 @@ if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("ShowConsole",
 
 builder.Services.AddGameHook(builder.Configuration);
 builder.Services.AddSingleton<MainWindowViewModel>();
+// REST API (GameHook.Api): runs its own Kestrel instance inside this same process/host, sharing
+// the GameHookRouter singleton above with the Avalonia UI - not a separate executable.
+builder.Services.AddHostedService<GameHook.Api.GameHookApiHostedService>();
 using var host = builder.Build();
 
 // Blocking: runs registered IHostedServices to completion, in registration order, before the
@@ -83,6 +86,11 @@ using var sigtermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTE
 
 BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
+// Avalonia's dispatcher SynchronizationContext is still installed on this thread here, but nothing
+// pumps it once the desktop lifetime has returned - any awaited continuation downstream that
+// captures it (Kestrel/ASP.NET shutdown included) would deadlock forever instead of just running
+// on the thread pool.
+SynchronizationContext.SetSynchronizationContext(null);
 host.StopAsync().GetAwaiter().GetResult();
 return 0;
 

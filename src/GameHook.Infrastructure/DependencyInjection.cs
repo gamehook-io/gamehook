@@ -38,7 +38,11 @@ public static class DependencyInjection
             }));
         services.TryAddSingleton<IDriverFactory, DriverFactory>();
         services.TryAddSingleton<IMapperFactory, MapperFactory>();
-        services.TryAddTransient<GameHookSession>();
+        // Singleton, not transient: the REST API (GameHook.Api) and the Avalonia UI must observe
+        // the same loaded mapper/driver, not each get their own independent session.
+        services.TryAddSingleton<GameHookSession>();
+        services.TryAddSingleton<GameHookRouter>();
+        services.TryAddSingleton<ApiBindStatus>();
 
 #if !DEBUG
         // A Debug build is a developer running from source, or a locally-built test binary -

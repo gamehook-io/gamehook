@@ -46,6 +46,9 @@
                                             HorizontalAlignment="Left" VerticalAlignment="Top"
                                             x:Name="HexViewer" />
                 </ScrollViewer>
+
+                <controls:LoadingOverlay Text="Reading memory…"
+                                         IsVisible="{Binding ShowLoadingSpinner}" />
             </Grid>
         </DockPanel>
     </Border>

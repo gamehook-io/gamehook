@@ -24,6 +24,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static readonly IBrush ErrorStatusBrush = new SolidColorBrush(Color.Parse("#E95D5D"));
 
     private readonly GameHookSession session;
+    private readonly GameHookRouter router;
     private readonly FilesystemProvider filesystemProvider;
     private readonly DockFactory dockFactory;
     private readonly HexViewerToolViewModel hexViewer;
@@ -168,10 +169,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public MainWindowViewModel(
         GameHookSession session,
+        GameHookRouter router,
         FilesystemProvider filesystemProvider,
         IEnumerable<DriverRegistration> driverRegistrations)
     {
         this.session = session;
+        this.router = router;
         this.filesystemProvider = filesystemProvider;
         session.Changed += OnSessionChanged;
 
@@ -258,7 +261,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task LoadSelectedMapperAsync()
     {
         ClearWorkspace();
-        var loaded = await session.LoadAsync(
+        var (loaded, _) = await router.LoadAsync(
             SelectedMapper!.FullPath,
             SelectedDriver!.Name,
             IsSaveStateDriver ? SelectedSaveStatePath : null).ConfigureAwait(true);
@@ -436,7 +439,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ShowLoadScreen()
     {
-        session.Unload();
+        router.Unload();
         ClearWorkspace();
     }
 
