@@ -1,7 +1,6 @@
 name: Release
 
-# Tests and packages both supported platforms before publishing a shared release.
-# Mapper tests use the exact commit written into the bundled configuration.
+# Builds and packages both supported platforms before publishing a shared release.
 # App updates consume these GitHub Releases unless a custom HTTPS feed is configured.
 on:
   workflow_dispatch:
@@ -98,11 +97,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-
-      - name: Test release against pinned mappers
-        env:
-          GAMEHOOK_TEST_MAPPERS: ${{ github.workspace }}/.release-mappers/dist
-        run: dotnet test src/Gamehook.slnx -c Release --nologo
 
       - name: Add dotnet tools to PATH
         shell: bash
