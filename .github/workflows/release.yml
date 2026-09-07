@@ -181,43 +181,11 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: xvfb-run --auto-servernum bash .github/scripts/smoke-linux.sh releases/linux-x64/Gamehook.AppImage
 
-      # vpk names every file "<packId>-<channel>-..." because that pattern is how the client-side
-      # updater finds the right .nupkg/releases.*.json/RELEASES for its channel - those three must
-      # keep vpk's exact names. Setup.exe/Portable.zip/AppImage aren't looked up by anything, they're
-      # just what a human clicks to download, so move them to their own directory under friendly
-      # names now, before either directory is uploaded anywhere. This is *why* renaming used to
-      # break things: doing it after vpk pack but in the same directory made `vpk upload github`
-      # (next job) go looking for a file under the name it itself generated and not find it -
-      # moving them out entirely instead of renaming in place sidesteps that completely.
-      - name: Relocate Windows installer/portable to friendly names
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          mkdir -p dist/${{ matrix.rid }}
-          version_dashed="${{ needs.resolve.outputs.version }}"
-          version_dashed="${version_dashed//./-}"
-          mv "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/gamehook-setup.exe"
-          mv "releases/${{ matrix.rid }}/Gamehook-win-Portable.zip" "dist/${{ matrix.rid }}/gamehook-${version_dashed}-portable.zip"
-
-      - name: Relocate Linux AppImage
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          mkdir -p dist/${{ matrix.rid }}
-          mv "releases/${{ matrix.rid }}/Gamehook.AppImage" "dist/${{ matrix.rid }}/Gamehook.AppImage"
-
       - name: Store verified release assets
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.channel }}
           path: releases/${{ matrix.rid }}/
-          if-no-files-found: error
-
-      - name: Store friendly-named download assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.channel }}
-          path: dist/${{ matrix.rid }}/
           if-no-files-found: error
 
   publish:
@@ -233,10 +201,6 @@ jobs:
         with:
           pattern: release-*
           path: release-assets
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: dist-*
-          path: dist-assets
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
       - name: Publish verified platform assets
@@ -255,6 +219,12 @@ jobs:
             echo "::error::Release $RELEASE_TAG already exists (draft or published). Refusing to merge/overwrite - delete the existing release on GitHub first, or resolve a different version." >&2
             exit 1
           fi
+          # --merge true is required here, not just tolerated: the *second* iteration of this loop
+          # (linux) finds the release the *first* (win) just created moments ago in this same run
+          # and needs merge enabled to add its assets to it rather than erroring on "already
+          # exists" - that's the mechanism that lands both channels in one release at all. The
+          # fail-fast check above is what actually keeps this from ever merging into a genuinely
+          # stale release from an earlier run; --merge here only ever sees releases from this run.
           prerelease=false
           for channel in win linux; do
           vpk upload github \
@@ -266,19 +236,8 @@ jobs:
             --releaseName "Gamehook $RELEASE_TAG" \
             --targetCommitish "$GITHUB_SHA" \
             --pre "$prerelease" \
-            --merge false \
+            --merge true \
             --publish false
           done
-
-          # The friendly-named human-facing files (renamed in the build job's "Relocate ..." steps,
-          # before vpk ever saw them) get attached directly - no asset-ID lookups or renaming after
-          # upload involved. --clobber makes this safe to retry against the same draft (--merge true
-          # above reuses it): it overwrites a same-named asset left over from an earlier attempt
-          # instead of erroring on it.
-          gh release upload "$RELEASE_TAG" \
-            dist-assets/dist-win/gamehook-setup.exe \
-            dist-assets/dist-win/gamehook-*-portable.zip \
-            dist-assets/dist-linux/Gamehook.AppImage \
-            --repo "$APP_REPO_URL" --clobber
 
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"
