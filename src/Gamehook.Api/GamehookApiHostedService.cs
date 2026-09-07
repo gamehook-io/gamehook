@@ -33,7 +33,7 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
         builder.Services.AddOpenApi();
 
-        var port = configuration.GetValue("ApiPort", 8085);
+        var port = configuration.GetValue<int>("Port");
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
         app = builder.Build();

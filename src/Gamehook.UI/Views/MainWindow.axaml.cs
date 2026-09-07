@@ -36,7 +36,7 @@ public partial class MainWindow : Window
 
         // Set once during host startup (see GamehookApiHostedService) before any window opens -
         // no event needed, just read it here. A bind failure means nothing is listening on
-        // ApiPort at all, so the docs link would just 404/refuse - disable it instead.
+        // Port at all, so the docs link would just 404/refuse - disable it instead.
         if (App.Services.GetRequiredService<ApiBindStatus>().Error is not null)
         {
             ApiDocumentationMenuItem.IsEnabled = false;
@@ -225,7 +225,7 @@ public partial class MainWindow : Window
     // startup AlertWindow in App.axaml.cs already surfaces a bind failure up front).
     private void ApiDocumentationMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var port = App.Services.GetRequiredService<IConfiguration>().GetValue("ApiPort", 8085);
+        var port = App.Services.GetRequiredService<IConfiguration>().GetValue<int>("Port");
         Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}/") { UseShellExecute = true });
     }
 }
