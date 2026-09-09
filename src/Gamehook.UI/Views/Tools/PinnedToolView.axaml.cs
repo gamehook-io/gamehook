@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Gamehook.UI.ViewModels;
 using Gamehook.UI.ViewModels.Tools;
 
@@ -16,6 +17,12 @@ public partial class PinnedToolView : UserControl
     // marks its own PointerPressed handled, so this never sees clicks that landed on that button.
     private void PinnedRow_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (e.Source is Avalonia.Visual visual &&
+            visual.FindAncestorOfType<SelectableTextBlock>(includeSelf: true) is not null)
+        {
+            return;
+        }
+
         if (sender is Border { DataContext: PropertyTreeNodeViewModel node } &&
             DataContext is PinnedToolViewModel { Main: { } main })
         {

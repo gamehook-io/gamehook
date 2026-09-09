@@ -5,7 +5,7 @@ using Dock.Model.Mvvm.Controls;
 
 namespace Gamehook.UI.ViewModels.Tools;
 
-public sealed class HexViewerToolViewModel : Tool
+public sealed class HexViewerToolViewModel : Document
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(250);
 

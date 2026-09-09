@@ -8,14 +8,14 @@
              x:Name="Root"
              x:DataType="tools:PropertyToolViewModel">
     <UserControl.Styles>
-        <Style Selector="TextBlock.inspector-label">
+        <Style Selector="SelectableTextBlock.inspector-label">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#7F9DC0" />
             <Setter Property="LetterSpacing" Value="0.7" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style Selector="TextBlock.inspector-value">
+        <Style Selector="SelectableTextBlock.inspector-value">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
@@ -88,14 +88,14 @@
         <ScrollViewer IsVisible="{Binding HasSelection}" AllowAutoHide="False">
             <StackPanel Margin="16,14" Spacing="12">
                 <StackPanel Spacing="4">
-                    <TextBlock FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap">
+                    <SelectableTextBlock FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap">
                         <Run Text="Address range " />
                         <Run Text="{Binding SelectionAddressRange}" />
-                    </TextBlock>
+                    </SelectableTextBlock>
                     <Border Classes="inspector-row">
                         <Grid ColumnDefinitions="112,*">
-                            <TextBlock Grid.Column="0" Text="Raw Bytes" Classes="inspector-label" />
-                            <TextBlock Grid.Column="1" Text="{Binding SelectionRawBytesHex, TargetNullValue='—'}" Classes="inspector-value" />
+                            <SelectableTextBlock Grid.Column="0" Text="Raw Bytes" Classes="inspector-label" />
+                            <SelectableTextBlock Grid.Column="1" Text="{Binding SelectionRawBytesHex, TargetNullValue='—'}" Classes="inspector-value" />
                         </Grid>
                     </Border>
                 </StackPanel>
@@ -105,10 +105,10 @@
                             <Border Classes="inspector-row">
                                 <StackPanel Spacing="3">
                                     <Grid ColumnDefinitions="*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="eyebrow" Margin="10,0,0,0" />
+                                        <SelectableTextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        <SelectableTextBlock Grid.Column="1" Text="{Binding Type}" Classes="eyebrow" Margin="10,0,0,0" />
                                     </Grid>
-                                    <TextBlock Text="{Binding DisplayValue}" Foreground="#82B8F2"
+                                    <SelectableTextBlock Text="{Binding DisplayValue}" Foreground="#82B8F2"
                                                Classes="inspector-value" />
                                 </StackPanel>
                             </Border>
@@ -122,8 +122,8 @@
             <StackPanel Margin="16,14" Spacing="14" DataContext="{Binding ActiveNode}"
                         x:DataType="vm:PropertyTreeNodeViewModel">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding Property.Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Property.Description}" Classes="muted" FontSize="12" TextWrapping="Wrap"
+                    <SelectableTextBlock Text="{Binding Property.Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding Property.Description}" Classes="muted" FontSize="12" TextWrapping="Wrap"
                                IsVisible="{Binding HasDescription}" />
                 </StackPanel>
 
@@ -156,7 +156,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Grid.Column="0" Text="{Binding ActiveNode.DisplayValue, TargetNullValue='—'}" FontSize="18" FontWeight="SemiBold"
+                            <SelectableTextBlock Grid.Column="0" Text="{Binding ActiveNode.DisplayValue, TargetNullValue='—'}" FontSize="18" FontWeight="SemiBold"
                                        Foreground="#82B8F2" TextWrapping="Wrap" IsVisible="{Binding ShowReadOnlyValue}" />
                             <Button Grid.Column="1" Classes="action value-editor-action" Content="Save" Click="SaveValueButton_Click"
                                     HorizontalAlignment="Stretch" MinWidth="0" IsEnabled="{Binding HasPendingValueEdit}"
@@ -203,63 +203,63 @@
                     <StackPanel>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Type" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Type" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Type}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Length" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Length, StringFormat='{}{0} bytes'}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Length" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Length, StringFormat='{}{0} bytes'}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding Address, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Address" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Address, StringFormat='0x{0:X}'}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Address" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Address, StringFormat='0x{0:X}'}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding Region, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Region" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Region}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Region" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Region}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding MemoryContainer, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Container" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding MemoryContainer}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Container" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding MemoryContainer}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding Bits, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Bits" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Bits}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Bits" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Bits}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding Reference, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Reference" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding Reference}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Reference" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Reference}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding CharacterMap, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Character Map" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding CharacterMap}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Character Map" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding CharacterMap}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                         <Border Classes="inspector-row" DataContext="{Binding Property}" x:DataType="domain:IProperty"
                                 IsVisible="{Binding StaticValue, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                             <Grid ColumnDefinitions="112,*">
-                                <TextBlock Grid.Column="0" Text="Static Value" Classes="inspector-label" />
-                                <TextBlock Grid.Column="1" Text="{Binding StaticValue}" Classes="inspector-value" />
+                                <SelectableTextBlock Grid.Column="0" Text="Static Value" Classes="inspector-label" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding StaticValue}" Classes="inspector-value" />
                             </Grid>
                         </Border>
                     </StackPanel>

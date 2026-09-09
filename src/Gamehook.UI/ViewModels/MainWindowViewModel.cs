@@ -30,6 +30,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly HexViewerToolViewModel hexViewer;
     private Dictionary<string, IProperty>? treeSourceProperties;
     private readonly List<PropertyTreeNodeViewModel> treeLeaves = [];
+    private readonly Dictionary<string, PropertyTreeNodeViewModel> propertySearchIndex =
+        new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? explorerSearchCancellation;
+    private int explorerSearchVersion;
     private int sessionUpdateQueued;
     private bool disposed;
     private RawByteSelection? rawByteSelection;
@@ -82,8 +86,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ObservableCollection<MapperChoice> Mappers { get; } = [];
     public ObservableCollection<DriverChoice> Drivers { get; } = [];
     public ObservableCollection<PropertyTreeNodeViewModel> Tree { get; } = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<PropertySearchTreeNodeViewModel> searchTree = [];
+
+    [ObservableProperty]
+    private PropertySearchTreeNodeViewModel? selectedSearchNode;
     public ObservableCollection<string> RegionIds { get; } = [];
     public PropertiesToolViewModel PropertiesPanel { get; }
+    public WorkspaceToolViewModel WorkspacePanel { get; }
     public HexViewerToolViewModel HexViewerPanel => hexViewer;
     public PropertyToolViewModel PropertyPanel { get; private set; } = null!;
     public PinnedToolViewModel PinnedPanel { get; }
@@ -204,17 +215,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         var properties = CreateLockedTool(new PropertiesToolViewModel(this));
-        hexViewer = CreateLockedTool(new HexViewerToolViewModel(this));
+        var workspace = CreateLockedDocument(new WorkspaceToolViewModel(this));
+        hexViewer = CreateLockedDocument(new HexViewerToolViewModel(this));
         var property = CreateLockedTool(new PropertyToolViewModel(this));
         var pinned = CreateLockedTool(new PinnedToolViewModel(this));
         PropertiesPanel = properties;
+        WorkspacePanel = workspace;
         PropertyPanel = property;
         PinnedPanel = pinned;
 
-        dockFactory = new DockFactory(this, properties, hexViewer, property, pinned);
+        dockFactory = new DockFactory(this, properties, workspace, hexViewer, property, pinned);
         Layout = dockFactory.CreateLayout();
         dockFactory.InitLayout(Layout);
         dockFactory.PropertyInspectorReplaced += SetDockedPropertyTool;
+        hexViewer.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(HexViewerToolViewModel.IsActive) && hexViewer.IsActive)
+            {
+                _ = hexViewer.RefreshAsync(force: true);
+            }
+        };
     }
 
     public string? GetLastOpenedSaveStateDirectory() => filesystemProvider.GetLastOpenedSaveStateDirectory();
@@ -327,7 +347,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         // Raw memory reads share driver ownership and use their own display cadence.
-        _ = hexViewer.RefreshAsync();
+        if (hexViewer.IsActive)
+        {
+            _ = hexViewer.RefreshAsync();
+        }
     }
 
     private void RebuildTree(IMapper activeMapper)
@@ -337,6 +360,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         Pinned.Clear();
         PinnedProperties.Clear();
         treeLeaves.Clear();
+        propertySearchIndex.Clear();
         OnPropertyChanged(nameof(HasPinnedProperties));
         foreach (var node in PropertyTreeNodeViewModel.Build(activeMapper.Properties.Values))
         {
@@ -347,9 +371,112 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             treeLeaves.Add(leaf);
             leaf.PinnedChanged += OnNodePinnedChanged;
+            propertySearchIndex[leaf.Property!.Name] = leaf;
         }
 
         OnPropertyChanged(nameof(HasProperties));
+        ApplyExplorerSearch(PropertiesPanel.SearchText);
+    }
+
+    public void ApplyExplorerSearch(string searchText)
+    {
+        explorerSearchCancellation?.Cancel();
+        var searchVersion = ++explorerSearchVersion;
+        var query = NormalizeExplorerSearch(searchText);
+        if (query.Length == 0)
+        {
+            ReplaceSearchTree([]);
+            return;
+        }
+
+        var index = propertySearchIndex.ToArray();
+        var cancellation = explorerSearchCancellation = new CancellationTokenSource();
+        _ = Task.Run(
+            () => BuildSearchTree(index, query, cancellation.Token),
+            cancellation.Token).ContinueWith(
+                task => Dispatcher.UIThread.Post(
+                    () => ApplyExplorerMatches(task, searchVersion, cancellation)),
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+    }
+
+    private void ApplyExplorerMatches(
+        Task<IReadOnlyList<PropertySearchTreeNodeViewModel>> task,
+        int searchVersion,
+        CancellationTokenSource cancellation)
+    {
+        if (task.IsCanceled || task.IsFaulted || cancellation.IsCancellationRequested || searchVersion != explorerSearchVersion)
+        {
+            if (task.Status == TaskStatus.RanToCompletion)
+            {
+                foreach (var node in task.Result)
+                {
+                    node.Dispose();
+                }
+            }
+            return;
+        }
+
+        ReplaceSearchTree(task.Result);
+    }
+
+    private static string NormalizeExplorerSearch(string searchText) => string.Join(
+        '.',
+        searchText.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static IReadOnlyList<PropertySearchTreeNodeViewModel> BuildSearchTree(
+        KeyValuePair<string, PropertyTreeNodeViewModel>[] index,
+        string query,
+        CancellationToken cancellationToken)
+    {
+        var roots = new Dictionary<string, SearchTreeBuilder>(StringComparer.Ordinal);
+        foreach (var entry in index)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!entry.Key.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var children = roots;
+            SearchTreeBuilder? current = null;
+            foreach (var segment in entry.Key.Split('.'))
+            {
+                if (!children.TryGetValue(segment, out current))
+                {
+                    current = new SearchTreeBuilder(segment);
+                    children.Add(segment, current);
+                }
+                children = current.Children;
+            }
+            current!.Source = entry.Value;
+        }
+        return roots.Values.Select(SearchTreeBuilder.Build).ToArray();
+    }
+
+    private void ReplaceSearchTree(IReadOnlyList<PropertySearchTreeNodeViewModel> next)
+    {
+        foreach (var node in SearchTree)
+        {
+            node.Dispose();
+        }
+        SearchTree = next;
+    }
+
+    partial void OnSelectedSearchNodeChanged(PropertySearchTreeNodeViewModel? value)
+    {
+        SelectedNode = value?.Source;
+    }
+
+    private sealed class SearchTreeBuilder(string name)
+    {
+        public string Name { get; } = name;
+        public PropertyTreeNodeViewModel? Source { get; set; }
+        public Dictionary<string, SearchTreeBuilder> Children { get; } = new(StringComparer.Ordinal);
+
+        public static PropertySearchTreeNodeViewModel Build(SearchTreeBuilder builder) =>
+            new(builder.Name, builder.Source, builder.Children.Values.Select(Build).ToArray());
     }
 
     private void SyncHexRegions()
@@ -389,6 +516,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         tool.CanDrag = false;
         tool.CanDrop = false;
         return tool;
+    }
+
+    private static T CreateLockedDocument<T>(T document) where T : Document
+    {
+        document.CanClose = false;
+        document.CanPin = false;
+        document.CanFloat = false;
+        document.CanDockAsDocument = false;
+        document.CanDrag = false;
+        document.CanDrop = false;
+        return document;
     }
 
     // Clicking a watched row in the Pinned panel jumps the Property panel and hex viewer
@@ -633,6 +771,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void ClearWorkspace()
     {
+        explorerSearchCancellation?.Cancel();
+        explorerSearchVersion++;
         hexViewer.Clear();
         foreach (var leaf in treeLeaves) leaf.PinnedChanged -= OnNodePinnedChanged;
         treeSourceProperties = null;
@@ -644,6 +784,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         DataWarning = null;
         ConnectionWarning = null;
         Tree.Clear();
+        ReplaceSearchTree([]);
+        propertySearchIndex.Clear();
         Pinned.Clear();
         PinnedProperties.Clear();
         treeLeaves.Clear();
@@ -659,6 +801,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (disposed) return;
         disposed = true;
+        explorerSearchCancellation?.Cancel();
+        ReplaceSearchTree([]);
         session.Changed -= OnSessionChanged;
         session.StopPolling();
         PropertyPanel.Dispose();

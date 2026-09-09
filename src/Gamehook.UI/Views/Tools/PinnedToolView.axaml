@@ -40,8 +40,8 @@
                                 <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="26">
                                     <TextBlock Grid.Column="0" Text="{Binding Property.Name}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="1" Text="{Binding DisplayValue}" VerticalAlignment="Center"
-                                               Margin="14,0,5,0" HorizontalAlignment="Right" FontSize="11"
+                                    <SelectableTextBlock Grid.Column="1" Text="{Binding DisplayValue}" VerticalAlignment="Center"
+                                               Margin="14,0,5,0" FontSize="11"
                                                Foreground="#82B8F2" TextTrimming="CharacterEllipsis" />
                                     <Button Grid.Column="2" Classes="pin pinned"
                                             Command="{Binding TogglePinCommand}"

@@ -12,6 +12,7 @@ public sealed class DockFactory : Factory
 {
     private readonly MainWindowViewModel main;
     private readonly PropertiesToolViewModel properties;
+    private readonly WorkspaceToolViewModel workspace;
     private readonly HexViewerToolViewModel hexViewer;
     private readonly PropertyToolViewModel property;
     private readonly PinnedToolViewModel pinned;
@@ -21,12 +22,14 @@ public sealed class DockFactory : Factory
     public DockFactory(
         MainWindowViewModel main,
         PropertiesToolViewModel properties,
+        WorkspaceToolViewModel workspace,
         HexViewerToolViewModel hexViewer,
         PropertyToolViewModel property,
         PinnedToolViewModel pinned)
     {
         this.main = main;
         this.properties = properties;
+        this.workspace = workspace;
         this.hexViewer = hexViewer;
         this.property = property;
         this.pinned = pinned;
@@ -43,11 +46,12 @@ public sealed class DockFactory : Factory
             IsCollapsable = false,
         };
 
-        var hexViewerDock = new ToolDock
+        var workspaceDock = new DocumentDock
         {
             Proportion = 0.45,
-            ActiveDockable = hexViewer,
-            VisibleDockables = CreateList<IDockable>(hexViewer),
+            ActiveDockable = workspace,
+            VisibleDockables = CreateList<IDockable>(workspace, hexViewer),
+            TabsLayout = DocumentTabLayout.Top,
             IsCollapsable = false,
         };
 
@@ -84,7 +88,7 @@ public sealed class DockFactory : Factory
             (
                 leftDock,
                 new ProportionalDockSplitter(),
-                hexViewerDock,
+                workspaceDock,
                 new ProportionalDockSplitter(),
                 rightDock
             ),
@@ -111,7 +115,7 @@ public sealed class DockFactory : Factory
             return;
         }
 
-        if (dockable is Tool)
+        if (dockable is Tool or Document)
         {
             HideDockable(dockable);
             return;
@@ -164,6 +168,7 @@ public sealed class DockFactory : Factory
         ContextLocator = new()
         {
             ["Properties"] = () => main,
+            ["Workspace"] = () => main,
             ["HexViewer"] = () => main,
             ["Property"] = () => main,
             ["Pinned"] = () => main,
