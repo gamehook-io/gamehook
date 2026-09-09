@@ -28,7 +28,7 @@ public sealed class GameSystem(string id, MemoryRegionDefinition[] memoryRegions
     public static readonly GameSystem GB = new("GB", GameBoyRegions, Endianness.Big);
     public static readonly GameSystem GBC = new("GBC", GameBoyRegions, Endianness.Big);
     public static readonly GameSystem SNES = new("SNES",
-        [new("SRAM"), new("WRAM", BusAddress: 0x7E0000), new("VRAM"), new("OAM"), new("CGRAM")], Endianness.Little);
+        [new("SRAM"), new("WRAM", 0x20000, 0x7E0000), new("VRAM"), new("OAM"), new("CGRAM")], Endianness.Little);
     public static readonly GameSystem GBA = new("GBA",
     [
         new("SRAM"), new("EWRAM", 0x40000, 0x02000000), new("IWRAM", 0x8000, 0x03000000),
@@ -36,7 +36,11 @@ public sealed class GameSystem(string id, MemoryRegionDefinition[] memoryRegions
         new("Palette RAM", 0x400, 0x05000000),
     ], Endianness.Little);
     public static readonly GameSystem N64 = new("N64",
-        [new("RDRAM", BusAddress: 0), new("SP DMEM"), new("SP IMEM"), new("PIF RAM")], Endianness.Big);
+        [new("RDRAM", 0x800000, 0x80000000), new("SP DMEM"), new("SP IMEM"), new("PIF RAM")], Endianness.Big);
+    public static readonly GameSystem NES = new("NES",
+        [new("System RAM", 0x800, 0)], Endianness.Little);
+    public static readonly GameSystem NDS = new("NDS",
+        [new("System RAM", 0x400000, 0x02000000), new("Data TCM", 0x4000, 0x0E000000)], Endianness.Little);
 
-    public static readonly GameSystem[] All = [GB, GBC, SNES, GBA, N64];
+    public static readonly GameSystem[] All = [GB, GBC, SNES, GBA, N64, NES, NDS];
 }

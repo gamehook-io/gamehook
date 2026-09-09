@@ -5,6 +5,7 @@
         <LangVersion>latest</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
@@ -30,7 +31,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Update="SaveStates\*.state" CopyToOutputDirectory="PreserveNewest" />
+        <None Update="SaveStates\*.state0;SaveStates\*.state1;SaveStates\*.state2"
+              CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>

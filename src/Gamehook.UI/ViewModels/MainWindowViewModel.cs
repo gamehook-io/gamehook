@@ -155,28 +155,38 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string WindowTitle => Mapper is null
         ? "Gamehook"
         : $"Gamehook - {Mapper.GameName}";
-    public string? FooterMetricsBreakdown => IsConnected
-        ? $"Driver: {Mapper!.LastReadMetrics.Driver.TotalMilliseconds:0.##} ms\n" +
-          $"Property Translation: {Mapper!.LastReadMetrics.PropertyTranslation.TotalMilliseconds:0.##} ms\n" +
-          $"Inline Calculations: {Mapper!.LastReadMetrics.InlineCalculations.TotalMilliseconds * 1000:0.#} µs\n" +
-          $"Postprocessor: {Mapper!.LastReadMetrics.Postprocessor.TotalMilliseconds * 1000:0.#} µs\n" +
-          $"Total: {Mapper!.LastReadMetrics.Total.TotalMilliseconds:0.##} ms" +
-          FooterConnectionDetails
-        : null;
-
-    private string FooterConnectionDetails => Mapper?.ConsecutiveReadFailures switch
+    public string FooterDriverTime => FormatReadTime(Mapper?.LastReadMetrics.Driver);
+    public string FooterPropertyTranslationTime => FormatReadTime(Mapper?.LastReadMetrics.PropertyTranslation);
+    public string FooterInlineCalculationsTime => FormatReadTime(Mapper?.LastReadMetrics.InlineCalculations);
+    public string FooterPostprocessorTime => FormatReadTime(Mapper?.LastReadMetrics.Postprocessor);
+    public string FooterTotalTime => FormatReadTime(Mapper?.LastReadMetrics.Total);
+    public bool HasFooterConnectionDetails => !string.IsNullOrEmpty(FooterConnectionDetails);
+    public string FooterConnectionDetails => Mapper?.ConsecutiveReadFailures switch
     {
         0 or null => string.Empty,
         _ when Mapper.HasConnectionRefusal =>
-            $"\n\nRetroArch rejected connection\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
+            $"RetroArch rejected connection\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
             $"Check RetroArch is running and Network Commands are enabled.\nLast error: {Mapper.LastReadFailureMessage}",
         >= 5 =>
-            $"\n\nRetroArch not responding\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
+            $"RetroArch not responding\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
             $"Showing last successful values. Check RetroArch and Network Commands.\nLast error: {Mapper.LastReadFailureMessage}",
         _ =>
-            $"\n\nRetroArch read delayed\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
+            $"RetroArch read delayed\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
             $"Showing last successful values. Last error: {Mapper.LastReadFailureMessage}",
     };
+
+    private static string FormatReadTime(TimeSpan? elapsed) => $"{elapsed?.TotalMilliseconds ?? 0:0.00} ms";
+
+    private void OnFooterMetricsChanged()
+    {
+        OnPropertyChanged(nameof(FooterDriverTime));
+        OnPropertyChanged(nameof(FooterPropertyTranslationTime));
+        OnPropertyChanged(nameof(FooterInlineCalculationsTime));
+        OnPropertyChanged(nameof(FooterPostprocessorTime));
+        OnPropertyChanged(nameof(FooterTotalTime));
+        OnPropertyChanged(nameof(HasFooterConnectionDetails));
+        OnPropertyChanged(nameof(FooterConnectionDetails));
+    }
 
     public MainWindowViewModel(
         GamehookSession session,
@@ -326,7 +336,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         DataWarning = session.DataWarning;
         ConnectionWarning = session.ConnectionWarning;
         OnPropertyChanged(nameof(FooterStatusBrush));
-        OnPropertyChanged(nameof(FooterMetricsBreakdown));
+        OnFooterMetricsChanged();
 
         if (session.Mapper is not { } activeMapper)
         {
@@ -587,7 +597,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(WorkspaceName));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
-        OnPropertyChanged(nameof(FooterMetricsBreakdown));
+        OnFooterMetricsChanged();
 
         if (value is not null)
         {
@@ -625,7 +635,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsWorkspaceVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
-        OnPropertyChanged(nameof(FooterMetricsBreakdown));
+        OnFooterMetricsChanged();
         OnPropertyChanged(nameof(WindowTitle));
     }
 
@@ -641,7 +651,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(HasConnectionWarning));
         OnPropertyChanged(nameof(FooterStatusBrush));
-        OnPropertyChanged(nameof(FooterMetricsBreakdown));
+        OnFooterMetricsChanged();
     }
 
     partial void OnStatusChanged(string value)
@@ -653,7 +663,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsWorkspaceVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
-        OnPropertyChanged(nameof(FooterMetricsBreakdown));
+        OnFooterMetricsChanged();
     }
 
     // Called by the hex viewer when a byte is clicked. Expanding its path makes the

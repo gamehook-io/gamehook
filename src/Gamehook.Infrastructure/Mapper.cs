@@ -8,6 +8,7 @@ using Gamehook.Domain.Interface;
 using Gamehook.Domain.Property;
 using Jint;
 using Jint.Native;
+using Jint.Native.Object;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -58,13 +59,13 @@ public class Mapper : IMapper, IDisposable
     // between them reference exactly two.
     private readonly string[] runtimeTokenNames;
     private readonly ulong?[] runtimeTokenValues;
-    private readonly IReadOnlyList<XmlCondition> conditions;
     private TimeSpan lastPropertyTranslation;
     private TimeSpan lastInlineCalculations;
     private TimeSpan lastPostprocessor;
 
     private readonly Property[] compiledProperties;
     private readonly Dictionary<string, Property> propertiesByPath;
+    private readonly IReadOnlyDictionary<string, CopyBinding[]> copyBindingsByDestinationPath;
     private readonly IReadOnlyList<IDriver.MemorySegmentRequest> requests;
 
     // Serializes every property write for this mapper - writes are user-driven and rare, so one
@@ -90,6 +91,10 @@ public class Mapper : IMapper, IDisposable
     // is treated as a network blip rather than a fatal error - only a run of these actually
     // surfaces as a warning, so a one-off timeout doesn't flash an alarming banner at the user.
     private const int ConnectionWarningThreshold = 3;
+
+    // One destination property plus the suffix needed to find its source counterpart. These are
+    // built once because postprocessors commonly copy a whole subtree every read.
+    private sealed record CopyBinding(Property Destination, string SourceSuffix);
 
     public string MapperPath { get; }
     public GameSystem System => system;
@@ -155,14 +160,13 @@ public class Mapper : IMapper, IDisposable
         requests = compiled.Requests;
         compiledProperties = compiled.CompiledProperties.ToArray();
         requestsMemory = requests.Any(request => request.Length > 0);
-        conditions = compiled.Conditions;
         dynamicAddressProperties = compiled.DynamicAddressProperties.ToArray();
         runtimeTokenNames = compiled.RuntimeTokenNames.ToArray();
         runtimeTokenValues = new ulong?[runtimeTokenNames.Length];
         expressionBindings = compiled.ExpressionBindings.ToArray();
 
         propertiesByPath = compiledProperties.ToDictionary(p => p.Name, p => p, StringComparer.Ordinal);
-        foreach (var condition in conditions) condition.Validate(propertiesByPath);
+        copyBindingsByDestinationPath = BuildCopyBindings(compiledProperties);
 
         var dynamicAddressPropertySet = new HashSet<Property>(dynamicAddressProperties.Select(x => x.Property));
         foreach (var property in compiledProperties)
@@ -247,6 +251,10 @@ public class Mapper : IMapper, IDisposable
             handles.Set(property.Name, JsValue.FromObject(engine, new PropertyHandle(property)), handles);
         engine.SetValue("__mapper_properties", handles);
         engine.SetValue("__copy_properties", (Action<string, string>)CopyProperties);
+        engine.SetValue("__get_values", (Func<ObjectInstance, object?[]>)GetValues);
+        engine.SetValue("__set_values", (Action<ObjectInstance>)SetValues);
+        engine.SetValue("__clear_values", (Action<ObjectInstance>)ClearValues);
+        engine.SetValue("__copy_indexed", (Action<string, string, ObjectInstance>)CopyIndexed);
         // Bound eagerly as plain data properties rather than accessors: the handles never change,
         // so a getter would only add a CLR round-trip to every single property access from script.
         engine.Execute("""
@@ -265,6 +273,10 @@ public class Mapper : IMapper, IDisposable
                     if (values.value !== undefined) target.value = values.value;
                 },
                 copy_properties: __copy_properties,
+                get_values: __get_values,
+                set_values: __set_values,
+                clear_values: __clear_values,
+                copy_indexed: __copy_indexed,
             };
             function __get_variable(name) {
                 var v = __variables[name];
@@ -300,21 +312,124 @@ public class Mapper : IMapper, IDisposable
     // structure) is currently active. Bound as mapper.copy_properties; some mapper scripts (e.g.
     // pokemon_emerald.js) assign it directly to a local const with no pure-JS fallback, so this
     // isn't optional the way get/set_property_value's JS-level convenience wrappers are.
+    private static IReadOnlyDictionary<string, CopyBinding[]> BuildCopyBindings(IEnumerable<Property> properties)
+    {
+        var allProperties = properties.ToArray();
+        var destinationPaths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in allProperties)
+        {
+            var path = property.Name;
+            while (true)
+            {
+                destinationPaths.Add(path);
+
+                var separator = path.LastIndexOf('.');
+                if (separator < 0) break;
+                path = path[..separator];
+            }
+        }
+
+        // Match the original JavaScript startsWith behavior exactly, including paths where one
+        // segment happens to start with another. Mapper loading pays this small one-time cost so
+        // each read only walks destinations that will actually be copied.
+        return destinationPaths.ToDictionary(
+            destinationPath => destinationPath,
+            destinationPath => allProperties
+                .Where(property => property.Name.StartsWith(destinationPath, StringComparison.Ordinal))
+                .Select(property => new CopyBinding(property, property.Name[destinationPath.Length..]))
+                .ToArray(),
+            StringComparer.Ordinal);
+    }
+
     private void CopyProperties(string sourcePath, string destinationPath)
     {
+        if (copyBindingsByDestinationPath.TryGetValue(destinationPath, out var bindings))
+        {
+            foreach (var binding in bindings)
+            {
+                if (propertiesByPath.TryGetValue(sourcePath + binding.SourceSuffix, out var source))
+                    CopyProperty(source, binding.Destination);
+            }
+            return;
+        }
+
+        // Preserve the old starts-with behavior for unusual caller-supplied prefixes that are not
+        // mapper property paths. Normal mapper paths take the indexed route above.
         foreach (var (key, destination) in propertiesByPath)
         {
             if (!key.StartsWith(destinationPath, StringComparison.Ordinal) ||
                 !propertiesByPath.TryGetValue(sourcePath + key[destinationPath.Length..], out var source)) continue;
 
-            destination.SetMemoryContainer(source.MemoryContainer);
-            destination.SetAddress(source.Address);
-            destination.SetLength(source.Length);
-            destination.SetBits(source.Bits);
-            destination.SetReference(source.Reference);
-            destination.SetValueOverride(source.Value);
+            CopyProperty(source, destination);
         }
     }
+
+    private static void CopyProperty(Property source, Property destination)
+    {
+        destination.SetMemoryContainer(source.MemoryContainer);
+        destination.SetAddress(source.Address);
+        destination.SetLength(source.Length);
+        destination.SetBits(source.Bits);
+        destination.SetReference(source.Reference);
+        destination.SetValueOverride(source.Value);
+    }
+
+    private object?[] GetValues(ObjectInstance paths) =>
+        EnumerateArrayValues(paths, "get_values paths")
+            .Select(value => GetProperty(RequirePath(value, "get_values paths")).Value)
+            .ToArray();
+
+    private void SetValues(ObjectInstance values)
+    {
+        foreach (var path in values.GetOwnPropertyKeys())
+        {
+            if (!path.IsString()) throw new InvalidOperationException("set_values keys must be property paths.");
+            var descriptor = values.GetOwnProperty(path);
+            if (!descriptor.Enumerable) continue;
+            var value = values.Get(path).ToObject();
+            GetProperty(path.ToString()).SetValueOverride(value is double number ? unchecked((int)number) : value);
+        }
+    }
+
+    private void ClearValues(ObjectInstance paths)
+    {
+        foreach (var value in EnumerateArrayValues(paths, "clear_values paths"))
+            GetProperty(RequirePath(value, "clear_values paths")).SetValueOverride(null);
+    }
+
+    private void CopyIndexed(string sourcePrefix, string destinationPrefix, ObjectInstance indexes)
+    {
+        var destinationIndex = 0;
+        foreach (var index in EnumerateArrayValues(indexes, "copy_indexed indexes"))
+        {
+            if (!index.IsNumber()) throw new InvalidOperationException("copy_indexed indexes must be whole numbers.");
+            var sourceIndex = index.AsNumber();
+            if (double.IsNaN(sourceIndex) || double.IsInfinity(sourceIndex) || sourceIndex < 0 ||
+                sourceIndex > int.MaxValue || Math.Truncate(sourceIndex) != sourceIndex)
+                throw new InvalidOperationException("copy_indexed indexes must be whole numbers.");
+
+            var source = GetProperty($"{sourcePrefix}.{(int)sourceIndex}");
+            GetProperty($"{destinationPrefix}.{destinationIndex++}").SetValueOverride(source.Value);
+        }
+    }
+
+    private static IEnumerable<JsValue> EnumerateArrayValues(ObjectInstance values, string argumentName)
+    {
+        foreach (var key in values.GetOwnPropertyKeys())
+        {
+            if (!key.IsString()) throw new InvalidOperationException($"{argumentName} must be an array.");
+            if (!values.GetOwnProperty(key).Enumerable) continue;
+            yield return values.Get(key);
+        }
+    }
+
+    private Property GetProperty(string path) => propertiesByPath.TryGetValue(path, out var property)
+        ? property
+        : throw new InvalidOperationException($"Unknown mapper property '{path}'.");
+
+    private static string RequirePath(JsValue value, string argumentName) => value.IsString()
+        ? value.ToString()
+        : throw new InvalidOperationException($"{argumentName} must contain only property paths.");
 
     private void FillContainer(string name, double offset, object bytesValue)
     {
@@ -389,7 +504,7 @@ public class Mapper : IMapper, IDisposable
         }
         LastReadMetrics = new ReadMetrics(driverElapsed, lastPropertyTranslation, lastInlineCalculations, lastPostprocessor, totalTimer.Elapsed);
         this.logger.LogDebug(
-            "Read mapper {Mapper} in {TotalMilliseconds:0.###} ms; driver {DriverMilliseconds:0.###} ms, translation {TranslationMilliseconds:0.###} ms, inline {InlineMilliseconds:0.###} ms, postprocessor {PostprocessorMilliseconds:0.###} ms",
+            "Read mapper {Mapper} in {TotalMilliseconds:0.00} ms; driver {DriverMilliseconds:0.00} ms, translation {TranslationMilliseconds:0.00} ms, inline {InlineMilliseconds:0.00} ms, postprocessor {PostprocessorMilliseconds:0.00} ms",
             MapperFileName,
             LastReadMetrics.Total.TotalMilliseconds,
             LastReadMetrics.Driver.TotalMilliseconds,
@@ -575,11 +690,6 @@ public class Mapper : IMapper, IDisposable
         var inlineTimer = Stopwatch.StartNew();
         ApplyExpressions();
 
-        // Clear all derived outputs first, then run chains in XML order. The companion script
-        // sees the current snapshot's derived values, including dependencies between chains.
-        foreach (var condition in conditions)
-            foreach (var target in condition.Targets) target.SetValueOverride(null);
-        foreach (var condition in conditions) condition.Evaluate(propertiesByPath);
         lastInlineCalculations = inlineTimer.Elapsed;
 
         if (hasMapperScript)

@@ -20,8 +20,8 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     private const int DefaultPort = 55355;
     private const int ReceiveTimeoutMilliseconds = 2000;
 
-    // Keep ASCII hex replies comfortably below the UDP datagram size limit.
-    private const int MaximumReadChunkLength = 4096;
+    // An 8KB binary read becomes roughly 24KB of ASCII hex, well below UDP's payload limit.
+    private const int MaximumReadChunkLength = 8192;
 
     private readonly UdpClient client;
     private readonly SemaphoreSlim readGate = new(1, 1);
@@ -145,20 +145,24 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         return new IDriver.Response(DateTimeOffset.UtcNow, segments);
     }
 
-    // Some cores (e.g. Gambette) expose a region as several adjacent memory-map descriptors
-    // instead of one contiguous block (GB WRAM as two 4KB banks, rather than one 8KB span).
-    // READ_CORE_MEMORY can't span a descriptor boundary in a single call and silently
-    // truncates its reply at the boundary, so a read that crosses one has to be resumed
-    // from wherever the previous chunk left off. These continuation reads for a given
-    // top-level segment stay sequential (each needs the previous reply to know the next
-    // address); only the segments themselves run in parallel with each other.
+    // Start every fixed-size chunk at once. A core can still truncate a read at a memory-map
+    // descriptor boundary; only the missing tail then needs a dependent continuation request.
     private async Task<ReadOnlyMemory<byte>?> ReadCoreMemory(uint address, int length)
     {
         var bytes = new byte[length];
-        var offset = 0;
-        while (offset < length)
+        var chunks = new List<(int Offset, int Length)>();
+        for (var offset = 0; offset < length; offset += MaximumReadChunkLength)
         {
-            var chunk = await ReadCoreMemoryChunk(address + (uint)offset, Math.Min(length - offset, MaximumReadChunkLength)).ConfigureAwait(false);
+            chunks.Add((offset, Math.Min(length - offset, MaximumReadChunkLength)));
+        }
+
+        var replies = await Task.WhenAll(chunks.Select(chunk =>
+            ReadCoreMemoryChunk(address + (uint)chunk.Offset, chunk.Length))).ConfigureAwait(false);
+
+        for (var index = 0; index < chunks.Count; index++)
+        {
+            var (offset, requestedLength) = chunks[index];
+            var chunk = replies[index];
             if (chunk is null)
             {
                 return offset == 0 ? null : throw new InvalidDataException(
@@ -166,7 +170,20 @@ public sealed class RetroArchDriver : IDriver, IDisposable
             }
 
             chunk.Value.Span.CopyTo(bytes.AsSpan(offset));
-            offset += chunk.Value.Length;
+            var receivedLength = chunk.Value.Length;
+            while (receivedLength < requestedLength)
+            {
+                var continuation = await ReadCoreMemoryChunk(
+                    address + (uint)(offset + receivedLength), requestedLength - receivedLength).ConfigureAwait(false);
+                if (continuation is null)
+                {
+                    throw new InvalidDataException(
+                        $"RetroArch stopped responding with data partway through a read at 0x{address:x} (got {offset + receivedLength} of {length} byte(s)).");
+                }
+
+                continuation.Value.Span.CopyTo(bytes.AsSpan(offset + receivedLength));
+                receivedLength += continuation.Value.Length;
+            }
         }
 
         return bytes;

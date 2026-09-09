@@ -12,7 +12,6 @@ internal sealed record MapperCompilationResult(
     IReadOnlyDictionary<string, ReferenceTable> References,
     IReadOnlyList<IDriver.MemorySegmentRequest> Requests,
     IReadOnlyList<Property> CompiledProperties,
-    IReadOnlyList<XmlCondition> Conditions,
     IReadOnlyList<(Property Property, DeferredAddress Address)> DynamicAddressProperties,
     // Distinct script-set variable names every DeferredAddress indexes into, so a read resolves
     // each one once instead of once per property that mentions it.
@@ -25,7 +24,7 @@ internal sealed record MapperCompilationResult(
 // can each be read on their own - this class never touches a driver or runs a read.
 internal sealed class MapperCompiler
 {
-    private static readonly XNamespace VarNamespace = "https://schemas.pokeabyte.io/attributes/var";
+    private static readonly XNamespace VarNamespace = "https://schema.gamehook.io/attributes/var";
 
     // RetroArch replies with text hex bytes. Reading a sparse 8KB span to obtain two bytes at
     // opposite ends wastes network time and parser work, so only bridge small holes. The driver
@@ -36,7 +35,6 @@ internal sealed class MapperCompiler
     private readonly ExpressionEngine scriptEngine;
     private readonly IReadOnlyDictionary<string, XElement> macros;
     private readonly List<Property> compiledProperties = [];
-    private readonly List<XmlCondition> conditions = [];
     private readonly List<(Property Property, DeferredAddress Address)> dynamicAddressProperties = [];
     private readonly List<(Property Property, CompiledExpression Expression)> expressionBindings = [];
     private readonly List<string> runtimeTokenNames = [];
@@ -63,7 +61,6 @@ internal sealed class MapperCompiler
             references,
             requests,
             compiler.compiledProperties,
-            compiler.conditions,
             compiler.dynamicAddressProperties,
             compiler.runtimeTokenNames,
             compiler.expressionBindings);
@@ -86,15 +83,8 @@ internal sealed class MapperCompiler
         {
             var element = siblings[index];
             var elementName = element.Name.LocalName;
-            if (elementName == "if")
-            {
-                var condition = XmlCondition.Compile(siblings, ref index, path);
-                conditions.Add(condition);
-                compiledProperties.AddRange(condition.Targets);
-                continue;
-            }
-            if (elementName is "elif" or "else")
-                throw new InvalidDataException($"Orphan <{elementName}>: expected an adjacent <if> branch.");
+            if (elementName is "if" or "elif" or "else")
+                throw new InvalidDataException($"<{elementName}> is not supported in mapper XML. Put conditional logic in the companion .js file.");
             if (elementName == "property")
             {
                 compiledProperties.Add(CreateProperty(element, variables, path));

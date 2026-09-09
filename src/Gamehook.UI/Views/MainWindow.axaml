@@ -275,8 +275,37 @@
                     </Menu>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                Margin="0,0,4,0" ToolTip.Tip="{Binding FooterMetricsBreakdown}"
-                                IsVisible="{Binding HasReadingStatus}">
+                                Margin="0,0,4,0" IsVisible="{Binding HasReadingStatus}">
+                        <ToolTip.Tip>
+                            <Border Padding="10,8" MinWidth="230">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="READ TIMINGS" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{StaticResource MutedTextBrush}" />
+                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,6,0,0">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                              ColumnSpacing="16" RowSpacing="3">
+                                            <Grid.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontFamily" Value="Cascadia Mono, Menlo, Consolas, DejaVu Sans Mono" />
+                                                </Style>
+                                            </Grid.Styles>
+                                            <TextBlock Grid.Row="0" Text="Driver" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FooterDriverTime}" />
+                                            <TextBlock Grid.Row="1" Text="Property translation" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FooterPropertyTranslationTime}" />
+                                            <TextBlock Grid.Row="2" Text="Inline calculations" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FooterInlineCalculationsTime}" />
+                                            <TextBlock Grid.Row="3" Text="Postprocessor" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FooterPostprocessorTime}" />
+                                            <TextBlock Grid.Row="4" Text="Total" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding FooterTotalTime}" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{Binding FooterConnectionDetails}" TextWrapping="Wrap" MaxWidth="340"
+                                               IsVisible="{Binding HasFooterConnectionDetails}" />
+                                </StackPanel>
+                            </Border>
+                        </ToolTip.Tip>
                         <TextBlock Text="●" FontSize="8" Margin="0,0,6,0" VerticalAlignment="Center"
                                    Foreground="{Binding FooterStatusBrush}" />
                         <TextBlock Text="{Binding ReadingStatusText}" FontSize="10" VerticalAlignment="Center" />

@@ -26,8 +26,10 @@ public static class MemoryRegion
     /// result - the throwing overloads above are for one-off/diagnostic use.
     public static bool TryResolve(ulong address, GameSystem? system, out MemoryRegionDefinition definition)
     {
-        // Preserve the existing GB fallback for systems without property address translation.
-        var regions = (system?.Id == "GBA" ? system : GameSystem.GB).RegionDefinitions;
+        // A null system retains legacy Game Boy behavior. Every declared platform uses its own
+        // bus map so a mapper address always becomes the driver region and relative offset that
+        // correspond to that platform's actual memory layout.
+        var regions = (system ?? GameSystem.GB).RegionDefinitions;
         for (var index = 0; index < regions.Count; index++)
         {
             var region = regions[index];

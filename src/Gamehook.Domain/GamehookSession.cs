@@ -161,7 +161,7 @@ public sealed class GamehookSession : IDisposable
                 return false;
             }
 
-            Status = $"Read in {activeMapper.LastReadMetrics.Total.TotalMilliseconds:0.##} ms";
+            Status = $"Read in {activeMapper.LastReadMetrics.Total.TotalMilliseconds:0.00} ms";
             PropertiesReloaded?.Invoke();
             if (PropertiesChanged is { } handler)
             {

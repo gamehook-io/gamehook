@@ -39,8 +39,8 @@ public abstract class Property : IProperty
     private int bitShift;
 
     // Single place a mapper type string turns into a concrete Property - Mapper's compiled
-    // properties, its inspection properties, and XmlCondition's literal-assignment targets all
-    // go through this instead of each carrying their own copy of the type switch.
+    // properties and its inspection properties go through this instead of each carrying their own
+    // copy of the type switch.
     public static Property Create(PropertyConfig config, Endianness integerEndianness = Endianness.Big, GameSystem? system = null) =>
         config.Type switch
         {
