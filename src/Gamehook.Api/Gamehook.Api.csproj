@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Gamehook.Domain\Gamehook.Domain.csproj" />
+      <ProjectReference Include="..\Gamehook.Infrastructure\Gamehook.Infrastructure.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+      <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
+      <PackageReference Include="Scalar.AspNetCore" Version="2.17.3" />
+    </ItemGroup>
+
+</Project>

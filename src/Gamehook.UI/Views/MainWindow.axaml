@@ -1,0 +1,432 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.UI.ViewModels"
+             xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
+             xmlns:dock="using:Dock.Avalonia.Controls"
+             xmlns:dockmodel="using:Dock.Model.Core"
+        xmlns:controls="using:Gamehook.UI.Controls"
+        x:Class="Gamehook.UI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
+        Icon="/icon.ico"
+        Width="1600" Height="900" MinWidth="640" MinHeight="360"
+        CanResize="True"
+        WindowDecorations="None"
+        Background="{StaticResource AppBackgroundBrush}"
+        FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="12">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#151617" />
+        <SolidColorBrush x:Key="TitleBrush" Color="#202123" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#1B1C1E" />
+        <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#232529" />
+        <SolidColorBrush x:Key="SurfaceMutedBrush" Color="#191A1C" />
+        <SolidColorBrush x:Key="FieldBrush" Color="#202630" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#3B3E43" />
+        <SolidColorBrush x:Key="TextBrush" Color="#E3E6EB" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#9299A4" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#3D82CF" />
+        <SolidColorBrush x:Key="AccentDarkBrush" Color="#294F7E" />
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#1D3047" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#47C975" />
+        <SolidColorBrush x:Key="ErrorBrush" Color="#E95D5D" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#E0A339" />
+        <SolidColorBrush x:Key="WarningSoftBrush" Color="#3A2C10" />
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#7F9DC0" />
+            <Setter Property="LetterSpacing" Value="0.7" />
+        </Style>
+        <!-- Selectable so users can copy error text (e.g. driver exception messages) via drag-select or right-click. -->
+        <Style Selector="SelectableTextBlock.error">
+            <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+            <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="CornerRadius" Value="1" />
+            <Setter Property="Background" Value="{StaticResource FieldBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,3" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="16,6" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#4B79AD" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.action:pointerover">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover">
+            <Setter Property="Background" Value="#30343A" />
+        </Style>
+        <Style Selector="Button.secondary:pressed">
+            <Setter Property="Background" Value="#16181B" />
+        </Style>
+        <Style Selector="Button.chrome">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#C5C9D0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.08" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.chrome:pointerover">
+            <Setter Property="Background" Value="#33363B" />
+        </Style>
+        <Style Selector="Button.chrome:pressed">
+            <Setter Property="Background" Value="#26282C" />
+        </Style>
+        <Style Selector="Button.chrome.close:pointerover">
+            <Setter Property="Background" Value="#E81123" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.chrome.close:pressed">
+            <Setter Property="Background" Value="#F1707A" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.chrome Path">
+            <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}" />
+            <Setter Property="StrokeThickness" Value="1" />
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.pin">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="4,0,2,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="TreeViewItem:pointerover Button.pin">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Button.pin.pinned">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Path.pin-glyph">
+            <Setter Property="Fill" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="Button.pin.pinned Path.pin-glyph">
+            <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+        </Style>
+        <Style Selector="Menu">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style Selector="MenuItem">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style Selector="TreeViewItem" x:DataType="vm:PropertyTreeNodeViewModel">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="MinHeight" Value="18" />
+        </Style>
+        <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+        </Style>
+        <Style Selector="GridSplitter:pointerover">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style Selector="ScrollBar">
+            <Setter Property="AllowAutoHide" Value="False" />
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="Padding" Value="13,7" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Background" Value="#222428" />
+            <Setter Property="Foreground" Value="#AAB0B8" />
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <!-- ToolControl supplies each dock-panel's black/blue tab bar. Only Property becomes
+             floatable after a property or byte range is selected, so only it gets this action. -->
+        <Style Selector="dock|ToolControl">
+            <Setter Property="HeaderTemplate">
+                <DataTemplate x:DataType="dockmodel:IDockable">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding Title}" Padding="13,7" />
+                        <Button Grid.Column="1" Classes="property-tab-popout" Click="PropertyTabFloatButton_Click"
+                                IsVisible="{Binding CanFloat}" ToolTip.Tip="Open in new window">
+                            <Path Data="M3,3 H11 V5 H5 V13 H13 V7 H15 V15 H3 Z M9,3 H15 V9 M15,3 L8,10"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.property-tab-popout">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="Margin" Value="2,0,4,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="Button.property-tab-popout:pointerover">
+            <Setter Property="Background" Value="#315A82" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Border.pinned-row">
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
+        <Style Selector="Border.pinned-row:pointerover">
+            <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+        </Style>
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="#25282D" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Window.Styles>
+
+    <Border BorderBrush="#4A4D52" BorderThickness="1">
+        <Grid RowDefinitions="28,35,*">
+            <Border Grid.Row="0" Background="{StaticResource TitleBrush}"
+                    BorderBrush="#303236" BorderThickness="0,0,0,1"
+                    PointerPressed="TitleBar_PointerPressed">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Image Grid.Column="0" Width="16" Height="16" Margin="7,0,0,0"
+                           Source="/icon.png" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding WindowTitle}"
+                               FontSize="11"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Classes="chrome" Click="MinimizeButton_Click" ToolTip.Tip="Minimize">
+                            <Path Data="M0,5 H10" />
+                        </Button>
+                        <Button Classes="chrome" Click="MaximizeButton_Click" ToolTip.Tip="Maximize">
+                            <Path x:Name="MaximizeRestoreIcon" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z" />
+                        </Button>
+                        <Button Classes="chrome close" Click="CloseButton_Click" ToolTip.Tip="Close">
+                            <Path Data="M0,0 L10,10 M10,0 L0,10" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="3,0">
+                    <Menu Grid.Column="0" VerticalAlignment="Center">
+                        <MenuItem Header="File">
+                            <MenuItem Header="Load" Command="{Binding ShowLoadScreenCommand}" />
+                            <MenuItem Header="Load Mapper…" Click="LoadMapperMenuItem_Click" />
+                            <MenuItem Header="Reload" Command="{Binding ReloadCommand}" />
+                            <Separator />
+                            <MenuItem Header="Exit" Click="ExitMenuItem_Click" />
+                        </MenuItem>
+                        <MenuItem Header="API">
+                            <MenuItem x:Name="ApiDocumentationMenuItem" Header="Open API Documentation"
+                                      Click="ApiDocumentationMenuItem_Click" />
+                        </MenuItem>
+                        <MenuItem Header="Help">
+                            <MenuItem Header="About Gamehook" Click="AboutMenuItem_Click" />
+                        </MenuItem>
+                    </Menu>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                Margin="0,0,4,0" IsVisible="{Binding HasReadingStatus}">
+                        <ToolTip.Tip>
+                            <Border Padding="10,8" MinWidth="230">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="READ TIMINGS" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{StaticResource MutedTextBrush}" />
+                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,6,0,0">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                              ColumnSpacing="16" RowSpacing="3">
+                                            <Grid.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontFamily" Value="Cascadia Mono, Menlo, Consolas, DejaVu Sans Mono" />
+                                                </Style>
+                                            </Grid.Styles>
+                                            <TextBlock Grid.Row="0" Text="Driver" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FooterDriverTime}" />
+                                            <TextBlock Grid.Row="1" Text="Property translation" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FooterPropertyTranslationTime}" />
+                                            <TextBlock Grid.Row="2" Text="Inline calculations" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FooterInlineCalculationsTime}" />
+                                            <TextBlock Grid.Row="3" Text="Postprocessor" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FooterPostprocessorTime}" />
+                                            <TextBlock Grid.Row="4" Text="Total" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding FooterTotalTime}" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{Binding FooterConnectionDetails}" TextWrapping="Wrap" MaxWidth="340"
+                                               IsVisible="{Binding HasFooterConnectionDetails}" />
+                                </StackPanel>
+                            </Border>
+                        </ToolTip.Tip>
+                        <TextBlock Text="●" FontSize="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                   Foreground="{Binding FooterStatusBrush}" />
+                        <TextBlock Text="{Binding ReadingStatusText}" FontSize="10" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="2" IsVisible="{Binding IsLoadScreenVisible}">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="640" Margin="20" Spacing="20" HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                            <Image Source="/icon.png" Width="64" Height="64" />
+                            <TextBlock Text="Gamehook" FontSize="18" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Gamehook is a debugging tool for reading and modifying emulator memory."
+                                   Classes="muted" FontSize="12" LineHeight="19" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,20" />
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="DRIVER" Classes="eyebrow" />
+                            <ComboBox HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
+                                      PlaceholderText="Select a driver...">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DriverChoice">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="Where Gamehook reads memory from." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7" IsVisible="{Binding IsSaveStateDriver}">
+                            <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding SelectedSaveStatePath}"
+                                         PlaceholderText="No file selected" IsReadOnly="True"
+                                         Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}"
+                                         Padding="8,6" />
+                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                        Click="BrowseSaveStateButton_Click" />
+                            </Grid>
+                            <TextBlock Text="Select a save-state file from your computer." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="MAPPER" Classes="eyebrow" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
+                                          PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:MapperChoice">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                        IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
+                            </Grid>
+                            <TextBlock Text="Maps game memory to human-readable properties." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <SelectableTextBlock Grid.Column="0" Text="{Binding Status}" Classes="error"
+                                                  VerticalAlignment="Center" TextWrapping="Wrap"
+                                                  IsVisible="{Binding HasError}" />
+                            <Button Grid.Column="1" Content="Load" Command="{Binding LoadCommand}"
+                                    Classes="action" Width="110" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <Grid Grid.Row="2" IsVisible="{Binding IsConnecting}">
+                <controls:LoadingOverlay Text="Connecting…" />
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="6,6,6,5"
+                  IsVisible="{Binding IsWorkspaceVisible}">
+                <DockControl Layout="{Binding Layout}" IsDockingEnabled="False" />
+
+                <StackPanel VerticalAlignment="Top">
+                    <Border Padding="10,7" Background="{StaticResource WarningSoftBrush}"
+                            BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                            IsVisible="{Binding HasDataWarning}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="⚠" Foreground="{StaticResource WarningBrush}"
+                                       VerticalAlignment="Center" FontSize="13" />
+                            <TextBlock Grid.Column="1" Text="{Binding DataWarning}" Foreground="{StaticResource WarningBrush}"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" FontSize="11" />
+                            <Button Grid.Column="2" Content="✕" Classes="chrome" VerticalAlignment="Center"
+                                    Command="{Binding DismissDataWarningCommand}" />
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
+                    Background="Transparent" PointerPressed="ResizeWest_PointerPressed" />
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
+                    Background="Transparent" PointerPressed="ResizeEast_PointerPressed" />
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
+                    Background="Transparent" PointerPressed="ResizeNorth_PointerPressed" />
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
+                    Background="Transparent" PointerPressed="ResizeSouth_PointerPressed" />
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Cursor="TopLeftCorner"
+                    Background="Transparent" PointerPressed="ResizeNorthWest_PointerPressed" />
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Cursor="TopRightCorner"
+                    Background="Transparent" PointerPressed="ResizeNorthEast_PointerPressed" />
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Cursor="BottomLeftCorner"
+                    Background="Transparent" PointerPressed="ResizeSouthWest_PointerPressed" />
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Cursor="BottomRightCorner"
+                    Background="Transparent" PointerPressed="ResizeSouthEast_PointerPressed" />
+        </Grid>
+    </Border>
+</Window>

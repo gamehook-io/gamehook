@@ -1,0 +1,29 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: gamehook-io/mappers
+          path: .test-mappers
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Test
+        env:
+          GAMEHOOK_TEST_MAPPERS: ${{ github.workspace }}/.test-mappers/dist
+        run: dotnet test src/Gamehook.slnx -c Release --nologo
+      - name: Test calendar release versions
+        run: python .github/scripts/test_release_version.py

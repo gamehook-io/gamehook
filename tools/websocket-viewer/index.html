@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gamehook WebSocket Viewer</title>
+<style>
+  :root {
+    --bg: #0d0f12;
+    --panel: #15181d;
+    --panel-border: #262a31;
+    --text: #e2e4e8;
+    --muted: #8b909a;
+    --accent: #5b9dff;
+    --good: #4ade80;
+    --bad: #f87171;
+    --flash: #234;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 1.25rem;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .page {
+    width: 100%;
+    max-width: 110rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex: 1;
+    min-height: 0;
+  }
+
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  h1 .sub { color: var(--muted); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .panel-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .panel-title h2 { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+  .panel-title .count { font-size: 0.75rem; color: var(--muted); font-family: ui-monospace, monospace; }
+  .panel-title .controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+  #bar { display: flex; gap: 0.5rem; align-items: center; }
+  input, select {
+    padding: 0.5rem 0.65rem;
+    background: #1b1f26;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  input:focus, select:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #url { flex: 1; font-family: ui-monospace, monospace; }
+  button {
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    background: #1b1f26;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  button:hover { background: #232833; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0a0e14; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger { border-color: #5c2b2b; color: #ffb4b4; }
+  button.danger:hover { background: #2a1717; }
+  button.active { border-color: #facc15; color: #facc15; }
+
+  #status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; white-space: nowrap; }
+  #status .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--bad); }
+  #status.connected .dot { background: var(--good); box-shadow: 0 0 6px var(--good); }
+  #status.connecting .dot { background: #facc15; }
+  #status.connected .label { color: var(--good); }
+  #status.disconnected .label { color: var(--bad); }
+  #status.connecting .label { color: #facc15; }
+
+  #filter { width: 12rem; font-family: ui-monospace, monospace; }
+
+  #connectBar.hidden, #connectionPanel.hidden { display: none; }
+  #connectionPanel { flex: none; }
+  #connectionPanel #log { max-height: 8rem; flex: none; }
+
+  .main-row {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 1rem;
+    flex: 1;
+    min-height: 0;
+  }
+  .main-row > .panel { min-width: 0; }
+  @media (max-width: 60rem) {
+    .main-row { grid-template-columns: 1fr; }
+  }
+
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 0.83rem; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--panel-border); }
+  th { color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: var(--text); }
+  th .arrow { font-size: 0.7rem; margin-left: 0.2rem; opacity: 0.7; }
+  td.path { color: var(--accent); }
+  td.value { color: var(--text); }
+  td.bytes { color: var(--muted); }
+  td.time { color: var(--muted); white-space: nowrap; }
+  tbody tr:hover { background: #1a1e25; }
+  tr.flash { animation: flash 1s ease-out; }
+  @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
+
+  #tableWrap { flex: 1; min-height: 0; overflow-y: auto; border-radius: 6px; }
+  thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+
+  .empty { color: var(--muted); font-style: italic; padding: 1rem 0.5rem; font-size: 0.83rem; }
+
+  #log, #json {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    background: #0a0c10;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.74rem;
+    line-height: 1.5;
+  }
+  #log { color: var(--muted); }
+  #json { color: #a9d18e; }
+  #json div, #log div { white-space: pre; }
+
+  #jsonPanel { min-height: 20rem; }
+
+  .checkbox-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--muted); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Gamehook WebSocket Viewer</h1>
+
+  <div class="panel" id="connectBar">
+    <div id="bar">
+      <input id="url" value="ws://127.0.0.1:61358/ws" spellcheck="false">
+      <button id="connect" class="primary">Connect</button>
+      <label class="checkbox-label"><input type="checkbox" id="autoReconnect" checked> auto-reconnect</label>
+      <span id="status" class="disconnected"><span class="dot"></span></span>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="connectionPanel">
+    <div class="panel-title">
+      <h2>Connection log</h2>
+      <div class="controls">
+        <button id="disconnect" class="danger">Disconnect</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <div class="main-row">
+    <div class="panel">
+      <div class="panel-title">
+        <h2>Properties</h2>
+        <div class="controls">
+          <span class="count" id="rowCount">0 tracked</span>
+          <input id="filter" placeholder="filter by path...">
+          <button id="clearRows">Clear</button>
+        </div>
+      </div>
+      <div id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="path">path<span class="arrow"></span></th>
+              <th data-sort="value">value<span class="arrow"></span></th>
+              <th data-sort="bytes">bytes<span class="arrow"></span></th>
+              <th data-sort="time">last updated<span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="empty" id="emptyState">No properties yet - connect to start streaming.</div>
+      </div>
+    </div>
+
+    <div class="panel" id="jsonPanel">
+      <div class="panel-title">
+        <h2>JSON message log</h2>
+        <div class="controls">
+          <label class="checkbox-label"><input type="checkbox" id="autoScroll" checked> auto-scroll</label>
+          <button id="pause">Pause</button>
+          <button id="clearJson">Clear</button>
+        </div>
+      </div>
+      <div id="json"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const rowsEl = document.getElementById('rows');
+  const emptyStateEl = document.getElementById('emptyState');
+  const rowCountEl = document.getElementById('rowCount');
+  const statusEl = document.getElementById('status');
+  const connectBarEl = document.getElementById('connectBar');
+  const connectionPanelEl = document.getElementById('connectionPanel');
+  const logEl = document.getElementById('log');
+  const urlEl = document.getElementById('url');
+  const jsonEl = document.getElementById('json');
+  const filterEl = document.getElementById('filter');
+  const autoScrollEl = document.getElementById('autoScroll');
+  const pauseBtn = document.getElementById('pause');
+  const disconnectBtn = document.getElementById('disconnect');
+  const connectBtn = document.getElementById('connect');
+  const autoReconnectEl = document.getElementById('autoReconnect');
+  const rowByPath = new Map();
+  const MAX_LOG_LINES = 500;
+  const MAX_JSON_LINES = 500;
+  const RECONNECT_BASE_MS = 1000;
+  const RECONNECT_MAX_MS = 15000;
+  let socket = null;
+  let sortKey = 'time';
+  let sortDir = -1;
+  let paused = false;
+  let manualDisconnect = false;
+  let reconnectAttempt = 0;
+  let reconnectTimer = null;
+
+  try {
+    const savedUrl = localStorage.getItem('gamehook-ws-url');
+    if (savedUrl) urlEl.value = savedUrl;
+  } catch { /* localStorage unavailable (e.g. file:// in some browsers) - fall back to default */ }
+
+  function log(msg) {
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.prepend(line);
+    while (logEl.childElementCount > MAX_LOG_LINES) logEl.removeChild(logEl.lastChild);
+  }
+
+  function setStatus(text, cls) {
+    statusEl.className = cls;
+    connectBarEl.classList.toggle('hidden', cls === 'connected');
+    connectionPanelEl.classList.toggle('hidden', cls !== 'connected');
+    disconnectBtn.disabled = cls !== 'connected';
+  }
+
+  function bytesToHex(bytes) {
+    if (!bytes) return '';
+    // byte[] serializes as a base64 string, not a JSON array.
+    if (typeof bytes === 'string') {
+      const binary = atob(bytes);
+      let hex = '';
+      for (let i = 0; i < binary.length; i++) hex += binary.charCodeAt(i).toString(16).toUpperCase().padStart(2, '0') + ' ';
+      return hex.trim();
+    }
+    return bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  }
+
+  function updateRowCount() {
+    rowCountEl.textContent = `${rowByPath.size} tracked`;
+    emptyStateEl.style.display = rowByPath.size === 0 ? 'block' : 'none';
+  }
+
+  function applyFilter() {
+    const needle = filterEl.value.trim().toLowerCase();
+    for (const [path, row] of rowByPath) {
+      row.style.display = needle && !path.toLowerCase().includes(needle) ? 'none' : '';
+    }
+  }
+
+  function applySort() {
+    if (!sortKey) return;
+    const rows = [...rowByPath.values()];
+    if (sortKey === 'time') {
+      rows.sort((a, b) => (Number(a.dataset.timestamp) - Number(b.dataset.timestamp)) * sortDir);
+    } else {
+      rows.sort((a, b) => {
+        const av = a.dataset[sortKey] ?? '';
+        const bv = b.dataset[sortKey] ?? '';
+        return av < bv ? -sortDir : av > bv ? sortDir : 0;
+      });
+    }
+    for (const row of rows) rowsEl.appendChild(row);
+  }
+
+  function upsertRow(change) {
+    let row = rowByPath.get(change.path);
+    if (!row) {
+      row = document.createElement('tr');
+      row.innerHTML = '<td class="path"></td><td class="value"></td><td class="bytes"></td><td class="time"></td>';
+      rowByPath.set(change.path, row);
+      rowsEl.appendChild(row);
+      updateRowCount();
+      applyFilter();
+    }
+    const now = Date.now();
+    const valueText = JSON.stringify(change.value);
+    const bytesText = bytesToHex(change.bytes);
+    const timeText = new Date(now).toLocaleTimeString();
+
+    row.querySelector('.path').textContent = change.path;
+    row.querySelector('.value').textContent = valueText;
+    row.querySelector('.bytes').textContent = bytesText;
+    row.querySelector('.time').textContent = timeText;
+    row.dataset.path = change.path;
+    row.dataset.value = valueText;
+    row.dataset.bytes = bytesText;
+    row.dataset.timestamp = now;
+
+    // Cheap O(1) reposition instead of re-sorting/re-appending every row on every update -
+    // the only case that needs live reordering is the default "most recent first" time sort.
+    if (sortKey === 'time' && sortDir === -1) rowsEl.insertBefore(row, rowsEl.firstChild);
+    else if (sortKey === 'time' && sortDir === 1) rowsEl.appendChild(row);
+
+    row.classList.remove('flash');
+    void row.offsetWidth; // restart animation
+    row.classList.add('flash');
+  }
+
+  function scheduleReconnect() {
+    if (manualDisconnect || !autoReconnectEl.checked) return;
+    clearTimeout(reconnectTimer);
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+    reconnectAttempt++;
+    log(`reconnecting in ${Math.round(delay / 1000)}s…`);
+    reconnectTimer = setTimeout(connect, delay);
+  }
+
+  function connect() {
+    clearTimeout(reconnectTimer);
+    if (socket) socket.close();
+
+    const url = urlEl.value.trim();
+    if (!/^wss?:\/\//i.test(url)) {
+      log(`refusing to connect: "${url}" is not a ws:// or wss:// URL`);
+      setStatus('disconnected', 'disconnected');
+      return;
+    }
+
+    manualDisconnect = false;
+    connectBtn.disabled = true;
+    setStatus('connecting…', 'connecting');
+
+    try {
+      socket = new WebSocket(url);
+    } catch (err) {
+      log(`failed to connect: ${err}`);
+      setStatus('disconnected', 'disconnected');
+      connectBtn.disabled = false;
+      scheduleReconnect();
+      return;
+    }
+
+    socket.onopen = () => {
+      reconnectAttempt = 0;
+      connectBtn.disabled = false;
+      setStatus('connected', 'connected');
+      log(`connected to ${url}`);
+      try { localStorage.setItem('gamehook-ws-url', url); } catch { /* ignore */ }
+    };
+    socket.onclose = () => {
+      connectBtn.disabled = false;
+      setStatus('disconnected', 'disconnected');
+      log('disconnected');
+      scheduleReconnect();
+    };
+    socket.onerror = () => { log('socket error'); };
+    socket.onmessage = (event) => {
+      if (paused) return;
+
+      let changes;
+      try { changes = JSON.parse(event.data); }
+      catch (err) { log(`bad message: ${err}`); return; }
+
+      const line = document.createElement('div');
+      line.textContent = event.data;
+      jsonEl.appendChild(line);
+      while (jsonEl.childElementCount > MAX_JSON_LINES) jsonEl.removeChild(jsonEl.firstChild);
+      if (autoScrollEl.checked) jsonEl.scrollTop = jsonEl.scrollHeight;
+
+      for (const change of changes) {
+        try { upsertRow(change); }
+        catch (err) { log(`bad row for ${change.path}: ${err}`); }
+      }
+    };
+  }
+
+  connectBtn.addEventListener('click', connect);
+  disconnectBtn.addEventListener('click', () => {
+    manualDisconnect = true;
+    clearTimeout(reconnectTimer);
+    if (socket) socket.close();
+  });
+  document.getElementById('clearJson').addEventListener('click', () => { jsonEl.textContent = ''; });
+  document.getElementById('clearRows').addEventListener('click', () => {
+    rowByPath.clear();
+    rowsEl.innerHTML = '';
+    updateRowCount();
+  });
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('active', paused);
+    log(paused ? 'stream paused' : 'stream resumed');
+  });
+  filterEl.addEventListener('input', applyFilter);
+  urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      sortDir = (sortKey === key) ? -sortDir : 1;
+      sortKey = key;
+      document.querySelectorAll('th[data-sort] .arrow').forEach(a => a.textContent = '');
+      th.querySelector('.arrow').textContent = sortDir === 1 ? '▲' : '▼';
+      applySort();
+    });
+  });
+
+  document.querySelector('th[data-sort="time"] .arrow').textContent = '▼';
+  updateRowCount();
+  connect();
+</script>
+</body>
+</html>
