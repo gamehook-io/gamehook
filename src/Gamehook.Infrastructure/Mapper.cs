@@ -483,9 +483,9 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             ConnectionWarning = consecutiveReadFailures >= ConnectionWarningThreshold
                 ? $"Driver failed the last {consecutiveReadFailures} read(s) in a row: {ex.Message}"
                 : null;
-            this.logger.LogWarning(ex,
-                "Read mapper {Mapper} dropped ({ConsecutiveFailures} consecutive failed read(s)).",
-                MapperFileName, consecutiveReadFailures);
+            this.logger.LogWarning(
+                "Read mapper {Mapper} dropped ({ConsecutiveFailures} consecutive failed read(s)): {Message}",
+                MapperFileName, consecutiveReadFailures, ex.Message);
             return false;
         }
 
