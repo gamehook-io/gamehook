@@ -191,7 +191,7 @@ jobs:
           cp "releases/${{ matrix.rid }}/Gamehook-win-Setup.exe" "dist/${{ matrix.rid }}/Gamehook.exe"
 
       - name: Store verified release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.channel }}
           path: releases/${{ matrix.rid }}/
@@ -199,7 +199,7 @@ jobs:
 
       - name: Store friendly-named installer copy
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.channel }}
           path: dist/${{ matrix.rid }}/
