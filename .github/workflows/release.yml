@@ -47,7 +47,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       mapper_commit: ${{ steps.mapper.outputs.commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Resolve release version
         id: version
         env:
@@ -95,9 +95,9 @@ jobs:
             icon: icon.png
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: gamehook-io/mappers
           ref: ${{ needs.resolve.outputs.mapper_commit }}
