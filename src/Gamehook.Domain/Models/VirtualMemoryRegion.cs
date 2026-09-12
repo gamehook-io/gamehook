@@ -1,4 +1,4 @@
-namespace Gamehook.Domain.Interface;
+namespace Gamehook.Domain.Models;
 
 /// <summary>Read-only virtual bytes derived from a declared slice of device RAM.</summary>
 public sealed record VirtualMemoryRegion(

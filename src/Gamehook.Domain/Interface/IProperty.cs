@@ -1,3 +1,5 @@
+using Gamehook.Domain.Models;
+
 namespace Gamehook.Domain.Interface;
 
 public interface IProperty

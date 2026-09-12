@@ -44,5 +44,7 @@ public interface INativeProcessorHost
 
     object? GetPropertyValue(string path);
 
+    ReadOnlyMemory<byte> GetPropertyBytes(string path);
+
     void SetPropertyValue(string path, object? value);
 }

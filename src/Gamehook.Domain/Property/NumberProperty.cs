@@ -1,6 +1,7 @@
 using System.Globalization;
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Models;
 
 namespace Gamehook.Domain.Property;
 

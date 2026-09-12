@@ -26,6 +26,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly GamehookSession session;
     private readonly GamehookRouter router;
     private readonly FilesystemProvider filesystemProvider;
+    private readonly RetroArchConfigurationService retroArchConfiguration;
     private readonly DockFactory dockFactory;
     private readonly HexViewerToolViewModel hexViewer;
     private Dictionary<string, IProperty>? treeSourceProperties;
@@ -104,6 +105,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public event Action<PropertyTreeNodeViewModel>? CenterTreeItemRequested;
     public event Action? ScrollHexToSelectionRequested;
     public event Action<RawByteSelection>? RawSelectionUpdated;
+    public event Func<IReadOnlyList<string>, Task<bool>>? RetroArchNetworkCommandsUnavailable;
     internal void OnHexRegionLoaded() => ScrollHexToSelectionRequested?.Invoke();
 
     public IRootDock Layout { get; }
@@ -192,11 +194,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         GamehookSession session,
         GamehookRouter router,
         FilesystemProvider filesystemProvider,
+        RetroArchConfigurationService retroArchConfiguration,
         IEnumerable<DriverRegistration> driverRegistrations)
     {
         this.session = session;
         this.router = router;
         this.filesystemProvider = filesystemProvider;
+        this.retroArchConfiguration = retroArchConfiguration;
         session.Changed += OnSessionChanged;
 
         try
@@ -282,6 +286,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (SelectedDriver is null || SelectedMapper is null || (IsSaveStateDriver && SelectedSaveStatePath is null))
         {
             Status = "Complete load setup first.";
+            return;
+        }
+
+        if (SelectedDriver.Name == RetroArchDriver.Name
+            && !await retroArchConfiguration.NetworkCommandsAvailableAsync().ConfigureAwait(true))
+        {
+            var setup = RetroArchNetworkCommandsUnavailable;
+            if (setup is not null && await setup(retroArchConfiguration.FindConfigurationFiles()).ConfigureAwait(true))
+            {
+                Status = "RetroArch Network Commands enabled in its configuration. Restart RetroArch, then load again.";
+            }
+            else
+            {
+                Status = "RetroArch is not answering on Network Commands. Start RetroArch, enable Settings > Network > Network Commands, then try again.";
+            }
             return;
         }
 

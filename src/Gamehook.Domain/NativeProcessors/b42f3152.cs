@@ -145,11 +145,27 @@ public sealed class b42f3152(GamehookSession session) : INativeProcessor
         foreach (var path in mapper.PropertyNames)
         {
             if (!path.StartsWith("bag.", StringComparison.Ordinal) || !path.EndsWith(".quantity", StringComparison.Ordinal)) continue;
-            if (mapper.GetPropertyValue(path) is int value) mapper.SetPropertyValue(path, value ^ quantityDecryptionKey);
+            var bytes = mapper.GetPropertyBytes(path).Span;
+            if (bytes.Length == 2)
+            {
+                var rawValue = BinaryPrimitives.ReadUInt16LittleEndian(bytes);
+                mapper.SetPropertyValue(path, (int)(rawValue ^ quantityDecryptionKey));
+            }
         }
 
-        if (mapper.GetPropertyValue("bag.coins") is int coins) mapper.SetPropertyValue("bag.coins", coins ^ quantityDecryptionKey);
-        if (mapper.GetPropertyValue("bag.money") is int money) mapper.SetPropertyValue("bag.money", unchecked((int)((uint)money ^ moneyDecryptionKey)));
+        var coinsBytes = mapper.GetPropertyBytes("bag.coins").Span;
+        if (coinsBytes.Length == 2)
+        {
+            var rawCoins = BinaryPrimitives.ReadUInt16LittleEndian(coinsBytes);
+            mapper.SetPropertyValue("bag.coins", (int)(rawCoins ^ quantityDecryptionKey));
+        }
+
+        var moneyBytes = mapper.GetPropertyBytes("bag.money").Span;
+        if (moneyBytes.Length == 4)
+        {
+            var rawMoney = BinaryPrimitives.ReadUInt32LittleEndian(moneyBytes);
+            mapper.SetPropertyValue("bag.money", unchecked((int)(rawMoney ^ moneyDecryptionKey)));
+        }
 
         if (dmaA != 0)
         {

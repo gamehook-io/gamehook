@@ -1,6 +1,6 @@
 using Gamehook.Domain.NativeProcessors;
 
-namespace Gamehook.Domain;
+namespace Gamehook.Domain.Logic;
 
 /// <summary>Maps stable mapper XML ids to built-in processor implementations.</summary>
 public static class NativeProcessorFactory

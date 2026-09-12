@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Gamehook.Domain;
+using Gamehook.Domain.Models;
 using Gamehook.Infrastructure.MapperUpdate;
 using Gamehook.Infrastructure.AppUpdate;
 using Gamehook.UI.ViewModels;
@@ -18,6 +19,8 @@ namespace Gamehook.UI.Views;
 
 public partial class MainWindow : Window
 {
+    private MainWindowViewModel? viewModel;
+
     private void PropertyTabFloatButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is Control { DataContext: PropertyToolViewModel inspector } source)
@@ -33,6 +36,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         UpdateMaximizeRestoreIcon();
+        DataContextChanged += OnDataContextChanged;
 
         // Set once during host startup (see GamehookApiHostedService) before any window opens -
         // no event needed, just read it here. A bind failure means nothing is listening on
@@ -43,6 +47,23 @@ public partial class MainWindow : Window
             ToolTip.SetTip(ApiDocumentationMenuItem, "REST API failed to start - see the startup warning for details.");
         }
     }
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (viewModel is not null)
+        {
+            viewModel.RetroArchNetworkCommandsUnavailable -= ShowRetroArchNetworkCommandsDialogAsync;
+        }
+
+        viewModel = DataContext as MainWindowViewModel;
+        if (viewModel is not null)
+        {
+            viewModel.RetroArchNetworkCommandsUnavailable += ShowRetroArchNetworkCommandsDialogAsync;
+        }
+    }
+
+    private async Task<bool> ShowRetroArchNetworkCommandsDialogAsync(IReadOnlyList<string> files) =>
+        await new RetroArchNetworkCommandsWindow(files).ShowDialog<bool>(this);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {

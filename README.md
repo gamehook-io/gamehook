@@ -1,6 +1,19 @@
 # Gamehook
 
-Gamehook is a desktop tool for reading emulator memory and inspecting game data through XML mapper definitions. It includes a property explorer, raw memory viewer, property inspector, and pinned watches.
+Gamehook is desktop software for reading emulator memory and inspecting game data through XML
+mapper definitions. It includes a property explorer, raw memory viewer, property inspector, and
+pinned watches.
+
+## Repository guide
+
+- [`src/`](src/README.md): application projects and tests.
+- [`docs/architecture.md`](docs/architecture.md): boundaries and dependency direction.
+- [`tools/`](tools): standalone developer tools, including WebSocket viewer.
+- [mappers repository](https://github.com/gamehook-io/mappers): mapper definitions and mapper API
+  documentation, intentionally versioned outside this application repository.
+
+Project standards: [contributing](CONTRIBUTING.md), [security](SECURITY.md), and
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Build and run
 

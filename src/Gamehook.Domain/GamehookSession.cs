@@ -1,4 +1,5 @@
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Logic;
 using Gamehook.Domain.NativeProcessors;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

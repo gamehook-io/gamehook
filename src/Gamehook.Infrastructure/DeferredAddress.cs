@@ -44,6 +44,9 @@ internal sealed class DeferredAddress
         this.parameterIndexes = parameterIndexes;
     }
 
+    /// <summary>Compiles a mapper address expression for allocation-free reads.</summary>
+    /// <param name="expression">Address expression to compile.</param>
+    /// <param name="variables">Compile-time mapper variables.</param>
     /// <param name="internToken">
     /// Maps a runtime token name onto its slot in the mapper-wide token table, so a read resolves
     /// each distinct token once (pokemon_emerald's 1500 deferred addresses share just two) instead

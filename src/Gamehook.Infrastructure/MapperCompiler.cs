@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Xml.Linq;
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Models;
 using Gamehook.Domain.Property;
 using Jint;
 
@@ -226,6 +227,7 @@ internal sealed class MapperCompiler
         }
         return result;
     }
+
 
     public static ulong ParseNumber(string value) => value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
         ? ulong.Parse(value[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture)

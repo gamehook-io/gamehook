@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Xml.Linq;
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Models;
 using Gamehook.Domain.NativeProcessors;
 using Gamehook.Domain.Property;
 using Jint;
@@ -264,6 +265,8 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     public IEnumerable<string> PropertyNames => propertiesByPath.Keys;
 
     public object? GetPropertyValue(string path) => GetProperty(path).Value;
+
+    public ReadOnlyMemory<byte> GetPropertyBytes(string path) => GetProperty(path).Bytes;
 
     public void SetPropertyValue(string path, object? value) => GetProperty(path).SetValueOverride(value);
 

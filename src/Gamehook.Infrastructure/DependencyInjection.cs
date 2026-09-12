@@ -1,5 +1,6 @@
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Models;
 using Gamehook.Infrastructure.AppUpdate;
 using Gamehook.Infrastructure.MapperUpdate;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +20,7 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddSingleton<FilesystemProvider>();
+        services.AddSingleton<Drivers.RetroArchConfigurationService>();
         services.AddGamehookLogging(configuration);
         services.AddSingleton<DriverRegistration>(new DriverRegistration(
             Drivers.RetroArchDriver.Name,
