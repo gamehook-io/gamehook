@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace Gamehook.Api;
+namespace Gamehook.RestApi;
 
 // Pushes property changes over a websocket instead of making clients poll GET /properties. One
 // JSON array per successful read tick, containing only the properties whose value/bytes changed -

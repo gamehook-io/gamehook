@@ -10,7 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Scalar.AspNetCore;
 
-namespace Gamehook.Api;
+namespace Gamehook.RestApi;
 
 /// Runs the REST API's own Kestrel instance inside the app's existing process/host, sharing the
 /// same GamehookRouter (and so the same GamehookSession/Mapper/Driver state) the Avalonia UI
@@ -62,14 +62,14 @@ public sealed class GamehookApiHostedService(
         }
         catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException)
         {
-            loggerFactory.CreateLogger("Gamehook.Api").LogWarning(ex, "Failed to bind REST API to port {Port}.", port);
+            loggerFactory.CreateLogger("Gamehook.RestApi").LogWarning(ex, "Failed to bind REST API to port {Port}.", port);
             bindStatus.Error = $"Gamehook could not start the REST API/WebSocket server on port {port}.\n\n{ex.Message}\n\nGamehook will still run, but API and websocket connectivity will be unavailable for this session. Is another Gamehook instance running?";
             await app.DisposeAsync().ConfigureAwait(false);
             app = null;
             return;
         }
 
-        loggerFactory.CreateLogger("Gamehook.Api")
+        loggerFactory.CreateLogger("Gamehook.RestApi")
             .LogInformation("REST API listening on http://127.0.0.1:{Port}.", port);
     }
 

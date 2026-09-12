@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 
-namespace Gamehook.Api;
+namespace Gamehook.RestApi;
 
 // Lets host shutdown kill every open /ws connection immediately. Kestrel's own graceful stop
 // aborts connections via the request's cancellation token, but that plumbing is unreliable for a

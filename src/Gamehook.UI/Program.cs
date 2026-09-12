@@ -65,9 +65,9 @@ if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("ShowConsole",
 
 builder.Services.AddGamehook(builder.Configuration);
 builder.Services.AddSingleton<MainWindowViewModel>();
-// REST API (Gamehook.Api): runs its own Kestrel instance inside this same process/host, sharing
+// REST API (Gamehook.RestApi): runs its own Kestrel instance inside this same process/host, sharing
 // the GamehookRouter singleton above with the Avalonia UI - not a separate executable.
-builder.Services.AddHostedService<Gamehook.Api.GamehookApiHostedService>();
+builder.Services.AddHostedService<Gamehook.RestApi.GamehookApiHostedService>();
 using var host = builder.Build();
 
 // Blocking: runs registered IHostedServices to completion, in registration order, before the

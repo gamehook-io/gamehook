@@ -40,7 +40,7 @@ public static class DependencyInjection
             }));
         services.TryAddSingleton<IDriverFactory, DriverFactory>();
         services.TryAddSingleton<IMapperFactory, MapperFactory>();
-        // Singleton, not transient: the REST API (Gamehook.Api) and the Avalonia UI must observe
+        // Singleton, not transient: the REST API (Gamehook.RestApi) and the Avalonia UI must observe
         // the same loaded mapper/driver, not each get their own independent session.
         services.TryAddSingleton<GamehookSession>();
         services.TryAddSingleton<GamehookRouter>();
