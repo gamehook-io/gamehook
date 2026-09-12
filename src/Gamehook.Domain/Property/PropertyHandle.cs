@@ -41,10 +41,4 @@ public sealed class PropertyHandle(Property property)
         get => property.Reference;
         set => property.SetReference(value);
     }
-
-    // Accepted for compatibility with the JS setProperty()'s generic passthrough of every field on
-    // a source property - nothing in the current mapper pack reads either of these back, only ever
-    // assigns them as part of copying one property's shape onto another.
-    public object? size { get; set; }
-    public object? bytes { get; set; }
 }

@@ -80,7 +80,7 @@ public abstract class Property : IProperty
     public string? CharacterMap { get; }
     public string? Description { get; }
 
-    /// Name of a script-populated virtual buffer (Mapper.memory.fill) this property reads from
+    /// Name of a native-processor virtual memory region this property reads from
     /// instead of live device memory; when set, Address is a relative offset into that buffer.
     public string? MemoryContainer { get; private set; }
     protected Endianness IntegerEndianness { get; }
@@ -246,7 +246,7 @@ public abstract class Property : IProperty
 
     public IDriver.MemorySegmentRequest? BuildRequest()
     {
-        // Virtual containers are populated by script (Mapper.memory.fill), never by the driver.
+        // Virtual regions are populated by native processors, never by the driver.
         if (MemoryContainer is not null) return null;
         if (Address is not { } address) return null;
         var region = ResolveRegion(address);

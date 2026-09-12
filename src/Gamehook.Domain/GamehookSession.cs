@@ -1,4 +1,5 @@
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.NativeProcessors;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -78,6 +79,7 @@ public sealed class GamehookSession : IDisposable
         {
             var mapper = mapperFactory.Create(mapperPath, driverName, driverSourcePath);
             Mapper = mapper;
+            AttachNativeProcessor(mapper);
             if (!await RefreshAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (loadGeneration == generation) UnloadFailedMapper();
@@ -225,6 +227,12 @@ public sealed class GamehookSession : IDisposable
     private static string FormatExceptionStatus(Exception ex) => ex is TimeoutException
         ? $"Error: {ex.Message} Is RetroArch running with Network Commands enabled?"
         : $"Error: {ex.Message}";
+
+    private void AttachNativeProcessor(IMapper mapper)
+    {
+        if (mapper is not INativeProcessorHost { NativeProcessorId: { Length: > 0 } processorId } host) return;
+        host.SetNativeProcessor(NativeProcessorFactory.Create(processorId, this));
+    }
 
     // Diffs the mapper's current property values/bytes against the previous tick's snapshot.
     // lastSnapshot is replaced wholesale each tick (not mutated in place) so a property removed by

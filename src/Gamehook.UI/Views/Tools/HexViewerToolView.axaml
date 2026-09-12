@@ -38,6 +38,7 @@
                 <ScrollViewer x:Name="HexScrollViewer" IsVisible="{Binding Main.HasProperties}" AllowAutoHide="False">
                     <controls:HexEditorView Bytes="{Binding Bytes}"
                                             StartingAddress="{Binding StartingAddress}"
+                                            AddressBase="{Binding AddressBase}"
                                             Properties="{Binding Main.Mapper.Properties}"
                                             RegionId="{Binding Main.SelectedRegionId}"
                                             SelectedProperty="{Binding Main.SelectedNode.Property}"

@@ -27,6 +27,9 @@ public sealed class HexEditorView : Control
     public static readonly StyledProperty<ulong> StartingAddressProperty =
         AvaloniaProperty.Register<HexEditorView, ulong>(nameof(StartingAddress));
 
+    public static readonly StyledProperty<ulong> AddressBaseProperty =
+        AvaloniaProperty.Register<HexEditorView, ulong>(nameof(AddressBase));
+
     public static readonly StyledProperty<Dictionary<string, IProperty>?> PropertiesProperty =
         AvaloniaProperty.Register<HexEditorView, Dictionary<string, IProperty>?>(nameof(Properties));
 
@@ -82,6 +85,14 @@ public sealed class HexEditorView : Control
     {
         get => GetValue(StartingAddressProperty);
         set => SetValue(StartingAddressProperty, value);
+    }
+
+    // Display-only bus-address base. StartingAddress remains region-relative so selections and
+    // raw writes continue using driver coordinates.
+    public ulong AddressBase
+    {
+        get => GetValue(AddressBaseProperty);
+        set => SetValue(AddressBaseProperty, value);
     }
 
     public Dictionary<string, IProperty>? Properties
@@ -186,6 +197,11 @@ public sealed class HexEditorView : Control
         {
             RebuildRegion();
             UpdatePropertyToolTip();
+        }
+
+        if (change.Property == AddressBaseProperty)
+        {
+            InvalidateVisual();
         }
 
         if (change.Property == SelectedPropertyProperty && SelectedProperty is not null)
@@ -318,7 +334,7 @@ public sealed class HexEditorView : Control
             }
 
             context.DrawText(
-                new FormattedText($"{regionStart + (ulong)rowStart:X6}", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, MonoTypeface, 13, AddressBrush),
+                new FormattedText($"{AddressBase + (ulong)rowStart:X6}", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, MonoTypeface, 13, AddressBrush),
                 new Point(0, y + 2));
 
             for (var col = 0; col < BytesPerRow; col++)

@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Xml.Linq;
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.NativeProcessors;
 using Gamehook.Domain.Property;
 using Jint;
 using Jint.Native;
@@ -14,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Gamehook.Infrastructure;
 
-public class Mapper : IMapper, IDisposable
+public class Mapper : IMapper, INativeProcessorHost, IDisposable
 {
     private static readonly (string Type, string Label)[] InspectionTypes =
     [
@@ -28,6 +29,7 @@ public class Mapper : IMapper, IDisposable
     private static readonly IReadOnlyList<IDriver.MemorySegmentSnapshot> EmptyMemorySegments = [];
     private static readonly IReadOnlyDictionary<string, ReferenceTable> EmptyReferences = new Dictionary<string, ReferenceTable>(StringComparer.Ordinal);
     private readonly IDriver driver;
+    private INativeProcessor? nativeProcessor;
     public IDriver MemoryDriver => driver;
     private bool disposed;
 
@@ -48,7 +50,7 @@ public class Mapper : IMapper, IDisposable
     private readonly ExpressionEngine scriptEngine = new();
     private readonly ScriptMemoryAccess memoryAccess;
     private readonly bool hasMapperScript;
-    private readonly Dictionary<string, byte[]> containers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, VirtualMemoryRegion> virtualMemoryRegions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ReadOnlyMemory<byte>> containerSnapshot = new(StringComparer.Ordinal);
 
     private readonly (Property Property, CompiledExpression Expression)[] expressionBindings;
@@ -97,6 +99,7 @@ public class Mapper : IMapper, IDisposable
     private sealed record CopyBinding(Property Destination, string SourceSuffix);
 
     public string MapperPath { get; }
+    public string? NativeProcessorId { get; }
     public GameSystem System => system;
     public string MapperFileName => Path.GetFileName(MapperPath);
     public string GameName { get; }
@@ -108,6 +111,9 @@ public class Mapper : IMapper, IDisposable
     public string? LastReadFailureMessage { get; private set; }
     public bool HasConnectionRefusal { get; private set; }
     public IReadOnlyList<IDriver.MemorySegmentSnapshot> LastMemorySegments => lastResponse?.Segments ?? [];
+    public IReadOnlyList<VirtualMemoryRegion> VirtualMemoryRegions => virtualMemoryRegions.Values
+        .OrderBy(region => region.Id, StringComparer.Ordinal)
+        .ToArray();
 
     public IReadOnlyList<PropertyInspection> Inspect(ReadOnlyMemory<byte> bytes) =>
         InspectionTypes
@@ -152,6 +158,7 @@ public class Mapper : IMapper, IDisposable
         system = GameSystem.All.SingleOrDefault(x => x.Id == (string?)root.Attribute("platform"))
             ?? throw new NotSupportedException($"Unsupported mapper platform '{(string?)root.Attribute("platform")}'.");
         GameName = (string?)root.Attribute("name") ?? Path.GetFileNameWithoutExtension(MapperPath).Replace('_', ' ');
+        NativeProcessorId = (string?)root.Attribute("nativeProcessor");
         this.driver = driver;
         memoryAccess = new ScriptMemoryAccess(system);
 
@@ -217,12 +224,52 @@ public class Mapper : IMapper, IDisposable
         }
     }
 
-    // Wires the __variables/__state/__console/__memory/__mapper globals every mapper script's boilerplate
-    // header destructures (e.g. "const mapper = __mapper;"), plus the preprocessor/postprocessor
-    // and dynamic-address helper functions Mapper.Refresh calls into. Must run before LoadScript -
-    // "const mapper = __mapper" captures whatever __mapper points to at that exact moment, not a
-    // live reference, so binding the real objects afterward would leave the mapper script's own local
-    // holding the stale placeholder.
+    public void SetNativeProcessor(INativeProcessor processor)
+    {
+        ArgumentNullException.ThrowIfNull(processor);
+        if (nativeProcessor is not null) throw new InvalidOperationException($"Mapper '{MapperFileName}' already has a native processor.");
+        nativeProcessor = processor;
+    }
+
+    public ReadOnlyMemory<byte> ReadMemory(ulong address, int length) => memoryAccess.ReadBytes(address, length);
+
+    public void DefineMemoryRegion(string id, ulong? sourceAddress, int length)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (virtualMemoryRegions.TryGetValue(id, out var existing)
+            && existing.SourceAddress == sourceAddress && existing.Length == length) return;
+        virtualMemoryRegions[id] = new VirtualMemoryRegion(id, sourceAddress, length, ReadOnlyMemory<byte>.Empty);
+        containerSnapshot.Remove(id);
+    }
+
+    public void SetMemoryRegionBytes(string id, ReadOnlyMemory<byte> bytes)
+    {
+        if (!virtualMemoryRegions.TryGetValue(id, out var region))
+            throw new InvalidOperationException($"Virtual memory region '{id}' must be declared before bytes are published.");
+        if (bytes.Length != region.Length)
+            throw new InvalidOperationException($"Virtual memory region '{id}' expects {region.Length} byte(s), got {bytes.Length}.");
+        var copy = bytes.ToArray();
+        virtualMemoryRegions[id] = region with { Bytes = copy };
+        containerSnapshot[id] = copy;
+    }
+
+    public void SetRuntimeVariable(string name, ulong value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var variables = scriptEngine.Engine.GetValue("__variables").AsObject();
+        variables.Set(name, JsValue.FromObject(scriptEngine.Engine, value), false);
+    }
+
+    public IEnumerable<string> PropertyNames => propertiesByPath.Keys;
+
+    public object? GetPropertyValue(string path) => GetProperty(path).Value;
+
+    public void SetPropertyValue(string path, object? value) => GetProperty(path).SetValueOverride(value);
+
+    // Wires script host globals, plus preprocessor/postprocessor and dynamic-address helper
+    // functions Mapper.Refresh calls into. Must run before LoadScript so script-facing const
+    // bindings capture the real host objects.
     private void BindScriptHost()
     {
         var engine = scriptEngine.Engine;
@@ -238,14 +285,9 @@ public class Mapper : IMapper, IDisposable
         engine.Execute("var __console = { log: function () { __log_impl(Array.prototype.slice.call(arguments).map(String).join(' ')); } };");
 
         engine.SetValue("__memory_namespace", memoryAccess);
-        engine.SetValue("__memory_fill", (Action<string, double, object>)FillContainer);
-        engine.Execute("var __memory = { defaultNamespace: __memory_namespace, fill: __memory_fill };");
+        engine.Execute("var __memory = { wram: __memory_namespace };");
 
-        // No write capability exists (IDriver has no Write method), and nothing in the read path
-        // calls it - only an unused write-back party editor export does, in a handful of mappers.
-        engine.Execute("var __driver = {};");
-
-        // Plain JS properties retain one handle per property, with no second host dictionary.
+        // set_property uses these private handles; scripts cannot access raw property objects.
         var handles = engine.Evaluate("({})").AsObject();
         foreach (var property in compiledProperties)
             handles.Set(property.Name, JsValue.FromObject(engine, new PropertyHandle(property)), handles);
@@ -253,17 +295,13 @@ public class Mapper : IMapper, IDisposable
         engine.SetValue("__copy_properties", (Action<string, string>)CopyProperties);
         engine.SetValue("__get_values", (Func<ObjectInstance, object?[]>)GetValues);
         engine.SetValue("__set_values", (Action<ObjectInstance>)SetValues);
-        engine.SetValue("__clear_values", (Action<ObjectInstance>)ClearValues);
-        engine.SetValue("__copy_indexed", (Action<string, string, ObjectInstance>)CopyIndexed);
         // Bound eagerly as plain data properties rather than accessors: the handles never change,
         // so a getter would only add a CLR round-trip to every single property access from script.
         engine.Execute("""
-            var __mapper = {
-                properties: __mapper_properties,
-                get_property_value: function (path) { return __mapper_properties[path].value; },
-                set_property_value: function (path, value) { __mapper_properties[path].value = value; },
-                get_property: function (path) { return __mapper_properties[path]; },
-                set_property: function (path, values) {
+            var __properties = {
+                getValue: function (path) { return __mapper_properties[path].value; },
+                setValue: function (path, value) { __mapper_properties[path].value = value; },
+                set: function (path, values) {
                     var target = __mapper_properties[path];
                     if (values.memoryContainer !== undefined) target.memoryContainer = values.memoryContainer;
                     if (values.address !== undefined) target.address = values.address;
@@ -272,11 +310,9 @@ public class Mapper : IMapper, IDisposable
                     if (values.reference !== undefined) target.reference = values.reference;
                     if (values.value !== undefined) target.value = values.value;
                 },
-                copy_properties: __copy_properties,
-                get_values: __get_values,
-                set_values: __set_values,
-                clear_values: __clear_values,
-                copy_indexed: __copy_indexed,
+                copy: __copy_properties,
+                getValues: __get_values,
+                setValues: __set_values,
             };
             function __get_variable(name) {
                 var v = __variables[name];
@@ -290,6 +326,9 @@ public class Mapper : IMapper, IDisposable
             function __run_postprocessor() {
                 if (typeof postprocessor === 'function') postprocessor();
             }
+            const variables = __variables;
+            const memory = __memory;
+            const properties = __properties;
             """);
     }
 
@@ -391,28 +430,6 @@ public class Mapper : IMapper, IDisposable
         }
     }
 
-    private void ClearValues(ObjectInstance paths)
-    {
-        foreach (var value in EnumerateArrayValues(paths, "clear_values paths"))
-            GetProperty(RequirePath(value, "clear_values paths")).SetValueOverride(null);
-    }
-
-    private void CopyIndexed(string sourcePrefix, string destinationPrefix, ObjectInstance indexes)
-    {
-        var destinationIndex = 0;
-        foreach (var index in EnumerateArrayValues(indexes, "copy_indexed indexes"))
-        {
-            if (!index.IsNumber()) throw new InvalidOperationException("copy_indexed indexes must be whole numbers.");
-            var sourceIndex = index.AsNumber();
-            if (double.IsNaN(sourceIndex) || double.IsInfinity(sourceIndex) || sourceIndex < 0 ||
-                sourceIndex > int.MaxValue || Math.Truncate(sourceIndex) != sourceIndex)
-                throw new InvalidOperationException("copy_indexed indexes must be whole numbers.");
-
-            var source = GetProperty($"{sourcePrefix}.{(int)sourceIndex}");
-            GetProperty($"{destinationPrefix}.{destinationIndex++}").SetValueOverride(source.Value);
-        }
-    }
-
     private static IEnumerable<JsValue> EnumerateArrayValues(ObjectInstance values, string argumentName)
     {
         foreach (var key in values.GetOwnPropertyKeys())
@@ -430,28 +447,6 @@ public class Mapper : IMapper, IDisposable
     private static string RequirePath(JsValue value, string argumentName) => value.IsString()
         ? value.ToString()
         : throw new InvalidOperationException($"{argumentName} must contain only property paths.");
-
-    private void FillContainer(string name, double offset, object bytesValue)
-    {
-        var source = bytesValue switch
-        {
-            byte[] arr => arr,
-            object[] arr => arr.Select(o => unchecked((byte)Convert.ToInt64(o, CultureInfo.InvariantCulture))).ToArray(),
-            _ => throw new InvalidOperationException("memory.fill expects an array of byte values."),
-        };
-        var start = checked((int)offset);
-        containers.TryGetValue(name, out var existing);
-        var required = start + source.Length;
-        if (existing is null || existing.Length < required)
-        {
-            var resized = new byte[required];
-            existing?.CopyTo(resized, 0);
-            existing = resized;
-        }
-        source.CopyTo(existing, start);
-        containers[name] = existing;
-        containerSnapshot[name] = existing;
-    }
 
     public async Task<bool> ReadAsync(CancellationToken cancellationToken = default)
     {
@@ -668,11 +663,17 @@ public class Mapper : IMapper, IDisposable
         // exact TimeSpan.Zero rather than stray timer noise.
         lastPostprocessor = TimeSpan.Zero;
         var preprocessorContinues = true;
-        if (hasMapperScript)
+        if (nativeProcessor is not null)
+        {
+            var nativePreprocessorTimer = Stopwatch.StartNew();
+            preprocessorContinues = RunNativePreprocessor();
+            lastPostprocessor = nativePreprocessorTimer.Elapsed;
+        }
+        if (preprocessorContinues && hasMapperScript)
         {
             var preprocessorTimer = Stopwatch.StartNew();
             preprocessorContinues = RunPreprocessor();
-            lastPostprocessor = preprocessorTimer.Elapsed;
+            lastPostprocessor += preprocessorTimer.Elapsed;
         }
         if (!preprocessorContinues)
         {
@@ -692,6 +693,12 @@ public class Mapper : IMapper, IDisposable
 
         lastInlineCalculations = inlineTimer.Elapsed;
 
+        if (nativeProcessor is not null)
+        {
+            var nativePostprocessorTimer = Stopwatch.StartNew();
+            RunNativePostprocessor();
+            lastPostprocessor += nativePostprocessorTimer.Elapsed;
+        }
         if (hasMapperScript)
         {
             var postprocessorTimer = Stopwatch.StartNew();
@@ -728,6 +735,18 @@ public class Mapper : IMapper, IDisposable
         }
     }
 
+    private bool RunNativePreprocessor()
+    {
+        try
+        {
+            return nativeProcessor!.Preprocessor();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException($"Mapper '{MapperFileName}' native processor '{NativeProcessorId}' preprocessor failed: {ex.Message}", ex);
+        }
+    }
+
     private void RunPostprocessor()
     {
         try
@@ -737,6 +756,18 @@ public class Mapper : IMapper, IDisposable
         catch (JintException ex)
         {
             throw new InvalidDataException($"Mapper '{MapperFileName}' postprocessor failed: {ex.Message}", ex);
+        }
+    }
+
+    private void RunNativePostprocessor()
+    {
+        try
+        {
+            nativeProcessor!.Postprocessor();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException($"Mapper '{MapperFileName}' native processor '{NativeProcessorId}' postprocessor failed: {ex.Message}", ex);
         }
     }
 

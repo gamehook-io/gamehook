@@ -491,7 +491,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void SyncHexRegions()
     {
-        var regions = HexViewerToolViewModel.GetRegions(Mapper?.System);
+        var regions = HexViewerToolViewModel.GetRegions(Mapper);
         if (RegionIds.SequenceEqual(regions, StringComparer.Ordinal))
         {
             return;

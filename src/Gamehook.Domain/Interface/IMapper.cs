@@ -27,6 +27,9 @@ public interface IMapper
 
     IReadOnlyList<IDriver.MemorySegmentSnapshot> LastMemorySegments { get; }
 
+    /// Native-generated memory regions exposed as read-only virtual hex regions.
+    IReadOnlyList<VirtualMemoryRegion> VirtualMemoryRegions => [];
+
     IReadOnlyList<PropertyInspection> Inspect(ReadOnlyMemory<byte> bytes);
 
     Task<bool> ReadAsync(CancellationToken cancellationToken = default);

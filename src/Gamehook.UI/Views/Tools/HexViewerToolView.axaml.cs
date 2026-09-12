@@ -40,6 +40,12 @@ public partial class HexViewerToolView : UserControl
                 return;
             }
 
+            if (edit.RegionId.StartsWith("virtual:", StringComparison.Ordinal))
+            {
+                HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
+                return;
+            }
+
             var (success, _) = await mapper.WriteRawBytesAsync(edit.RegionId, edit.Address, new[] { edit.NewValue });
             if (!success)
             {

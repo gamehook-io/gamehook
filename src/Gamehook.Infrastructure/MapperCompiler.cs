@@ -234,7 +234,7 @@ internal sealed class MapperCompiler
     private static int GetLength(XElement property) => (int?)property.Attribute("length") ?? 1;
 
     // <mapper><memory><read start="0x.." end="0x.."/></memory></mapper>: full ranges a mapper's
-    // script needs to see (via memory.defaultNamespace.get_*) regardless of which properties are
+    // script needs to see (via memory.wram.get_*) regardless of which properties are
     // declared. Folded into the same combined request set properties use, so script reads and
     // property decode share one driver round-trip and one snapshot per read.
     private IReadOnlyList<IDriver.MemorySegmentRequest> ReadMemoryBlocks(XElement? parent)
