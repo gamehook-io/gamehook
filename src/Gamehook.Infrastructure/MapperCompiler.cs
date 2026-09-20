@@ -151,7 +151,7 @@ internal sealed class MapperCompiler
             type,
             address,
             GetLength(element),
-            (string?)element.Attribute("bits"),
+            ResolveTemplate((string?)element.Attribute("bits"), variables),
             (string?)element.Attribute("reference"),
             (string?)element.Attribute("value"),
             (string?)element.Attribute("characterMap"),

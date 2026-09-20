@@ -11,6 +11,21 @@ using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 using Velopack;
 
+// CLI validation must exit before Velopack, DI, hosted services, or Avalonia start. It is safe
+// for CI and mapper authors because it never contacts an emulator or starts a desktop window.
+#if !DEBUG
+if (args.Contains("--validate-mapper"))
+{
+    if (OperatingSystem.IsWindows()) ConsoleWindow.Allocate();
+    return MapperValidationCommand.TryRun(args)!.Value;
+}
+#else
+if (MapperValidationCommand.TryRun(args) is { } mapperValidationExitCode)
+{
+    return mapperValidationExitCode;
+}
+#endif
+
 #if !DEBUG
 // Handle installer lifecycle events before recording normal application launches.
 VelopackApp.Build().Run();

@@ -39,8 +39,10 @@ public sealed class GameSystem(string id, MemoryRegionDefinition[] memoryRegions
         [new("RDRAM", 0x800000, 0x80000000), new("SP DMEM"), new("SP IMEM"), new("PIF RAM")], Endianness.Big);
     public static readonly GameSystem NES = new("NES",
         [new("System RAM", 0x800, 0)], Endianness.Little);
+    public static readonly GameSystem PSX = new("PSX",
+        [new("RAM", 0x200000, 0x80000000)], Endianness.Little);
     public static readonly GameSystem NDS = new("NDS",
         [new("System RAM", 0x400000, 0x02000000), new("Data TCM", 0x4000, 0x0E000000)], Endianness.Little);
 
-    public static readonly GameSystem[] All = [GB, GBC, SNES, GBA, N64, NES, NDS];
+    public static readonly GameSystem[] All = [GB, GBC, SNES, GBA, N64, NES, PSX, NDS];
 }
