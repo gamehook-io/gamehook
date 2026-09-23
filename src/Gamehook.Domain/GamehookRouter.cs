@@ -15,6 +15,10 @@ public sealed class GamehookRouter
 
     public GamehookSession Session { get; }
 
+    // Match display updates to a 60 Hz frame budget. RefreshAsync remains non-overlapping, so a
+    // slower driver naturally backs this off instead of queuing reads.
+    public static readonly TimeSpan PollingInterval = TimeSpan.FromMilliseconds(16);
+
     public string? DriverName { get; private set; }
     public string? DriverSourcePath { get; private set; }
     private string? mapperPath;
@@ -24,12 +28,15 @@ public sealed class GamehookRouter
     /// The one real load path - every host (UI's Load button, the API's POST /mapper, the API's
     /// POST /driver reload-in-place) funnels through this. Remembers the driver/mapper it was
     /// given so a later single-argument call (SetDriverAsync, LoadMapperAsync) can reuse them.
+    /// Starts polling on success regardless of host; the session holds off the loop itself while
+    /// continuous read mode is disabled.
     public async Task<(bool Success, string? Error)> LoadAsync(string mapperPath, string driverName, string? driverSourcePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(driverName);
 
         var success = await Session.LoadAsync(mapperPath, driverName, driverSourcePath, cancellationToken).ConfigureAwait(false);
+        if (success) Session.StartPolling(PollingInterval);
         DriverName = driverName;
         DriverSourcePath = driverSourcePath;
         this.mapperPath = success ? mapperPath : null;
@@ -82,15 +89,36 @@ public sealed class GamehookRouter
         return false;
     }
 
-    public Task<(bool Success, string? Error)> WritePropertyValueAsync(string path, object? value, CancellationToken cancellationToken = default) =>
-        Session.Mapper is { } mapper
+    public const string ContinuousReadDisabledWriteError = "Writing is unavailable while continuous read mode is disabled.";
+
+    // Every host's writes (REST API, property inspector, hex editor, popped-out inspector windows)
+    // come through the three Write* methods below, so continuous read mode's "no writes" rule is enforced
+    // here once rather than at each call site.
+    private bool TryRejectWrite(out Task<(bool Success, string? Error)> rejection)
+    {
+        if (Session.IsContinuousReadEnabled)
+        {
+            rejection = null!;
+            return false;
+        }
+
+        rejection = Task.FromResult<(bool, string?)>((false, ContinuousReadDisabledWriteError));
+        return true;
+    }
+
+    public Task<(bool Success, string? Error)> WritePropertyValueAsync(string path, object? value, CancellationToken cancellationToken = default)
+    {
+        if (TryRejectWrite(out var rejection)) return rejection;
+        return Session.Mapper is { } mapper
             ? mapper.WriteAsync(path, value, cancellationToken)
             : Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
+    }
 
     /// Raw byte poke scoped to one property's own address/region - reuses the same region-relative
     /// offset convention as WriteRawBytesAsync (see BuildRequest).
     public Task<(bool Success, string? Error)> WritePropertyBytesAsync(IProperty property, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
+        if (TryRejectWrite(out var rejection)) return rejection;
         if (Session.Mapper is not { } mapper) return Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
         if (property.Address is not { } address || property.Region is not { } region)
             return Task.FromResult<(bool, string?)>((false, "Property has no fixed address; write 'value' instead."));
@@ -141,6 +169,7 @@ public sealed class GamehookRouter
 
     public Task<(bool Success, string? Error)> WriteDriverRegionAsync(string region, ulong offset, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
+        if (TryRejectWrite(out var rejection)) return rejection;
         if (Session.Mapper is not { } mapper) return Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
         var regionId = ResolveRegionId(region);
         if (regionId is null) return Task.FromResult<(bool, string?)>((false, $"Unknown region '{region}'."));

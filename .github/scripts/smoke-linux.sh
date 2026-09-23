@@ -4,7 +4,6 @@ set -euo pipefail
 binary=$(realpath "$1")
 profile=$(mktemp -d)
 export XDG_DATA_HOME="$profile"
-export GamehookProfileDirectory="$profile/Gamehook"
 export AppUpdateEnabled=false
 export LIBGL_ALWAYS_SOFTWARE=1
 "$binary" >"$profile/startup.log" 2>&1 &

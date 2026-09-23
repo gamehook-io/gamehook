@@ -10,8 +10,10 @@ public static class PropertiesEndpoints
 {
     public static void MapPropertiesEndpoints(this WebApplication app)
     {
-        app.MapGet("/instance/properties", (GamehookRouter router) =>
+        app.MapGet("/instance/properties", async (GamehookRouter router, CancellationToken cancellationToken) =>
         {
+            if (await ReadOnDemandAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
+                return readProblem;
             if (router.Properties is not { } properties)
                 return ApiProblems.NotFound("No mapper is loaded.", "mapper_not_loaded");
 
@@ -19,17 +21,22 @@ public static class PropertiesEndpoints
         })
         .WithName("GetInstanceProperties")
         .WithSummary("Reads every property's value as a nested JSON object.")
-        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded.")
+        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded. While continuous read mode is disabled, the driver is read at request time; 503 if that read fails.")
         .Produces<Dictionary<string, object?>>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
         .WithTags("Instance");
 
-        app.MapGet("/instance/properties/{*path}", (
+        app.MapGet("/instance/properties/{*path}", async (
             string path,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the decoded property value.")] string? value,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the property bytes as integer array.")] string? bytes,
-            GamehookRouter router) =>
+            GamehookRouter router,
+            CancellationToken cancellationToken) =>
         {
+            if (await ReadOnDemandAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
+                return readProblem;
+
             var name = PathToPropertyName(path);
             if (!router.TryGetProperty(name, out var property))
                 return ApiProblems.NotFound($"Property '{path}' was not found.", "property_not_found");
@@ -42,14 +49,18 @@ public static class PropertiesEndpoints
         })
         .WithName("GetInstanceProperty")
         .WithSummary("Reads one property. Add ?value or ?bytes to get just that field instead of the full object.")
-        .WithDescription("Without a query selector, returns property metadata, decoded value, bytes, and hexadecimal bytes. ?value returns only the decoded value; ?bytes returns only the byte array. The value JSON type depends on the property type.")
+        .WithDescription("Without a query selector, returns property metadata, decoded value, bytes, and hexadecimal bytes. ?value returns only the decoded value; ?bytes returns only the byte array. The value JSON type depends on the property type. While continuous read mode is disabled, the driver is read at request time; 503 if that read fails.")
         .Produces<PropertyResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
         .WithTags("Instance");
 
         app.MapPost("/instance/properties/{*path}", async (string path, WritePropertyRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
         {
+            if (!router.Session.IsContinuousReadEnabled)
+                return ApiProblems.ContinuousReadDisabled("Writing");
+
             var name = PathToPropertyName(path);
             if (!router.TryGetProperty(name, out var property))
                 return ApiProblems.NotFound($"Property '{path}' was not found.", "property_not_found");
@@ -87,12 +98,26 @@ public static class PropertiesEndpoints
         })
         .WithName("WriteInstanceProperty")
         .WithSummary("Writes a property's value or raw bytes back to the device. Supply exactly one of 'value' or 'bytes'.")
-        .WithDescription("For value writes, supply the JSON value accepted by the mapper property, for example { \"value\": \"Red\" }. For byte writes, supply integers from 0 through 255, for example { \"bytes\": [12, 34] }. Supply exactly one field; both or neither returns 400.")
+        .WithDescription("For value writes, supply the JSON value accepted by the mapper property, for example { \"value\": \"Red\" }. For byte writes, supply integers from 0 through 255, for example { \"bytes\": [12, 34] }. Supply exactly one field; both or neither returns 400. Returns 409 while continuous read mode is disabled.")
         .Produces<SuccessResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .WithTags("Instance");
+    }
+
+    // Continuous read mode keeps the mapper's values fresh on its own; with it disabled nothing polls the
+    // driver, so read it now to answer with values as of this request. Null means "go ahead".
+    private static async Task<IResult?> ReadOnDemandAsync(GamehookRouter router, CancellationToken cancellationToken)
+    {
+        var session = router.Session;
+        if (session.IsContinuousReadEnabled || session.Mapper is not { } mapper) return null;
+        if (await session.ReadOnDemandAsync(cancellationToken).ConfigureAwait(false)) return null;
+
+        return ApiProblems.ServiceUnavailable(
+            mapper.LastReadFailureMessage ?? session.ConnectionWarning ?? session.Status,
+            "driver_read_failed");
     }
 
     // Mapper property names are dot-separated (e.g. "party.0.nickname"); the REST path uses '/'

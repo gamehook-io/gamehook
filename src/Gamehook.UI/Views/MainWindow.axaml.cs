@@ -234,19 +234,21 @@ public partial class MainWindow : Window
 
     private async void AboutMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var mapperUpdateService = App.Services.GetRequiredService<MapperUpdateService>();
+        // Not registered in Debug builds, which have no official mappers.
+        var mapperUpdateService = App.Services.GetService<MapperUpdateService>();
         await new AboutWindow(mapperUpdateService,
             App.Services.GetService<AppUpdateStatusProvider>(),
             App.Services.GetService<AppUpdateService>()).ShowDialog(this);
     }
 
-    // Scalar serves the OpenAPI reference at "/" on the REST API's own Kestrel port (see
-    // GamehookApiHostedService) - same port whether or not the bind actually succeeded, so this
-    // just opens it and lets the browser show its own connection-refused page on failure (the
-    // startup AlertWindow in App.axaml.cs already surfaces a bind failure up front).
+    // Scalar serves the OpenAPI reference at "/scalar" on the REST API's own Kestrel port (see
+    // GamehookApiHostedService) - "/" itself is just the version JSON. Same port whether or not
+    // the bind actually succeeded, so this just opens it and lets the browser show its own
+    // connection-refused page on failure (the startup AlertWindow in App.axaml.cs already surfaces
+    // a bind failure up front).
     private void ApiDocumentationMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var port = App.Services.GetRequiredService<IConfiguration>().GetValue<int>("Port");
-        Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}/") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}/scalar") { UseShellExecute = true });
     }
 }

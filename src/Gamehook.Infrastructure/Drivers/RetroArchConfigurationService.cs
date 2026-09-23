@@ -6,12 +6,10 @@ namespace Gamehook.Infrastructure.Drivers;
 /// <summary>Probes RetroArch Network Commands and safely updates known local configuration files.</summary>
 public sealed class RetroArchConfigurationService
 {
-    private const int DefaultPort = 55355;
-
-    public async Task<bool> NetworkCommandsAvailableAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> NetworkCommandsAvailableAsync(int port = RetroArchDriver.DefaultPort, CancellationToken cancellationToken = default)
     {
         using var client = new UdpClient();
-        client.Connect("127.0.0.1", DefaultPort);
+        client.Connect(NetworkEndpoint.DefaultHost, port);
         var command = "VERSION\n"u8.ToArray();
         await client.SendAsync(command, cancellationToken).ConfigureAwait(false);
         try

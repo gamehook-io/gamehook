@@ -18,7 +18,7 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
 {
     public const string Name = "SuperShuckie";
 
-    private const int DefaultPort = 55356;
+    public const int DefaultPort = 55356;
     private const int MaxReadBlocks = 128;
     private const int ReadBlockSize = 12;
     private const int HeaderSize = 32;
@@ -53,7 +53,7 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
 
     public SuperShuckieDriver(string? sourcePath)
     {
-        var (host, port) = ParseEndpoint(sourcePath);
+        var (host, port) = NetworkEndpoint.Parse(sourcePath, DefaultPort, "Super Shuckie");
         client = new UdpClient();
         client.Client.ReceiveTimeout = AckTimeoutMilliseconds;
         client.Connect(host, port);
@@ -336,29 +336,6 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
         var path = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? MacSharedMemoryPath : LinuxSharedMemoryPath;
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         return MemoryMappedFile.CreateFromFile(stream, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, leaveOpen: false);
-    }
-
-    private static (string Host, int Port) ParseEndpoint(string? sourcePath)
-    {
-        if (string.IsNullOrWhiteSpace(sourcePath))
-        {
-            return ("127.0.0.1", DefaultPort);
-        }
-
-        var separatorIndex = sourcePath.LastIndexOf(':');
-        if (separatorIndex < 0)
-        {
-            return (sourcePath, DefaultPort);
-        }
-
-        var host = sourcePath[..separatorIndex];
-        var portText = sourcePath[(separatorIndex + 1)..];
-        if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out var port))
-        {
-            throw new ArgumentException($"Invalid Super Shuckie endpoint '{sourcePath}'.", nameof(sourcePath));
-        }
-
-        return (host, port);
     }
 
     public void Dispose()

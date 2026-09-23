@@ -119,7 +119,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
     // Edits are deliberately staged. Device memory changes only when user explicitly presses Save.
     public async Task SubmitEditAsync()
     {
-        if (ActiveNode?.Property is not { } property || Main.Mapper is not { } mapper) return;
+        if (ActiveNode?.Property is not { } property || Main.Mapper is null) return;
         var (value, fingerprint) = GetEditedValue(property.Type);
         if (value is null && property.Type is "bool" or "int" or "uint" or "binaryCodedDecimal")
         {
@@ -128,7 +128,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         }
         if (fingerprint == lastSubmittedFingerprint) return;
 
-        var (success, error) = await mapper.WriteAsync(property.Name, value).ConfigureAwait(true);
+        var (success, error) = await Main.Router.WritePropertyValueAsync(property.Name, value).ConfigureAwait(true);
         EditError = success ? null : error;
         if (success)
         {
@@ -169,7 +169,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         var fingerprint = RawBytesFingerprint();
         if (fingerprint == lastSubmittedRawBytesFingerprint) return;
 
-        var (success, error) = await mapper.WriteRawBytesAsync(request.RegionId, request.StartingAddress, bytes).ConfigureAwait(true);
+        var (success, error) = await Main.Router.WriteDriverRegionAsync(request.RegionId, request.StartingAddress, bytes).ConfigureAwait(true);
         RawBytesEditError = success ? null : error;
         if (success)
         {

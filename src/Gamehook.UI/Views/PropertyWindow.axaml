@@ -38,5 +38,17 @@
             <Setter Property="CornerRadius" Value="1" />
         </Style>
     </Window.Styles>
-    <views:PropertyToolView />
+    <Grid>
+        <views:PropertyToolView />
+        <!-- A popped-out inspector sits outside the main window's workspace overlay, so it needs
+             its own: values here are live and editing would write. -->
+        <Grid Background="#CC151617" IsVisible="{Binding !Main.IsContinuousReadEnabled}">
+            <StackPanel Margin="20" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="Continuous read mode disabled" FontSize="14" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="300"
+                           Text="Values won't update while continuous read mode is off. Turn it back on from Settings &gt; Continuous Read Mode in the main window." />
+            </StackPanel>
+        </Grid>
+    </Grid>
 </Window>

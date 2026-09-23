@@ -17,7 +17,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
 {
     public const string Name = "RetroArch";
 
-    private const int DefaultPort = 55355;
+    public const int DefaultPort = 55355;
     private const int ReceiveTimeoutMilliseconds = 2000;
 
     // An 8KB binary read becomes roughly 24KB of ASCII hex, well below UDP's payload limit.
@@ -37,7 +37,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
 
     public RetroArchDriver(string? sourcePath)
     {
-        var (host, port) = ParseEndpoint(sourcePath);
+        var (host, port) = NetworkEndpoint.Parse(sourcePath, DefaultPort, "RetroArch");
         client = new UdpClient();
         client.Connect(host, port);
         receiveLoopTask = ReceiveLoopAsync();
@@ -355,29 +355,6 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     }
 
     private static bool IsAsciiWhiteSpace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
-
-    private static (string Host, int Port) ParseEndpoint(string? sourcePath)
-    {
-        if (string.IsNullOrWhiteSpace(sourcePath))
-        {
-            return ("127.0.0.1", DefaultPort);
-        }
-
-        var separatorIndex = sourcePath.LastIndexOf(':');
-        if (separatorIndex < 0)
-        {
-            return (sourcePath, DefaultPort);
-        }
-
-        var host = sourcePath[..separatorIndex];
-        var portText = sourcePath[(separatorIndex + 1)..];
-        if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out var port))
-        {
-            throw new ArgumentException($"Invalid RetroArch endpoint '{sourcePath}'.", nameof(sourcePath));
-        }
-
-        return (host, port);
-    }
 
     public void Dispose()
     {

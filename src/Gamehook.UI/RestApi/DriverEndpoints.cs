@@ -1,4 +1,6 @@
 using Gamehook.Domain;
+using Gamehook.Infrastructure;
+using Gamehook.Infrastructure.Drivers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -9,28 +11,45 @@ public static class DriverEndpoints
 {
     public static void MapDriverEndpoints(this WebApplication app)
     {
-        app.MapGet("/driver", (GamehookRouter router) =>
+        app.MapGet("/driver", (GamehookRouter router, IEnumerable<DriverRegistration> registrations) =>
             router.DriverName is null
                 ? ApiProblems.NotFound("No driver is selected.", "driver_not_selected")
-                : Results.Ok(new { value = router.DriverName }))
+                : Results.Ok(CreateDriverResponse(router, registrations)))
             .WithName("GetDriver")
             .WithSummary("Gets the currently selected driver.")
             .Produces<DriverResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithTags("Driver");
 
-        app.MapPost("/driver", async (SetDriverRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
+        app.MapPost("/driver", async (SetDriverRequest request, GamehookRouter router, IEnumerable<DriverRegistration> registrations, CancellationToken cancellationToken) =>
         {
             if (string.IsNullOrWhiteSpace(request.Value))
                 return ApiProblems.BadRequest("'value' is required.", "driver_name_required");
 
-            var (success, error) = await router.SetDriverAsync(request.Value, request.Source, cancellationToken).ConfigureAwait(false);
+            var source = request.Source;
+            if (request.Port is { } port)
+            {
+                var registration = FindRegistration(registrations, request.Value);
+                if (registration is not null && registration.DefaultPort is null)
+                    return ApiProblems.BadRequest($"The {registration.Name} driver does not use a port.", "driver_port_not_supported");
+
+                if (!NetworkEndpoint.IsValidPort(port))
+                    return ApiProblems.BadRequest("'port' must be from 1 through 65535.", "driver_port_invalid");
+
+                if (source?.Contains(':', StringComparison.Ordinal) is true)
+                    return ApiProblems.BadRequest("Supply the port in either 'port' or 'source', not both.", "driver_port_conflict");
+
+                source = NetworkEndpoint.Format(source, port);
+            }
+
+            var (success, error) = await router.SetDriverAsync(request.Value, source, cancellationToken).ConfigureAwait(false);
             return success
-                ? Results.Ok(new { value = router.DriverName })
+                ? Results.Ok(CreateDriverResponse(router, registrations))
                 : ApiProblems.Unprocessable(error ?? "Driver selection failed.", "driver_selection_failed");
         })
         .WithName("SetDriver")
         .WithSummary("Changes the driver. If a mapper is already loaded, it is reloaded against the new driver.")
+        .WithDescription("Network drivers (RetroArch, SuperShuckie) connect to localhost on their default port unless 'port' is supplied. 'source' may also give a host or host:port.")
         .Produces<DriverResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
@@ -52,6 +71,9 @@ public static class DriverEndpoints
 
         app.MapPost("/driver/{region}", async (string region, WriteDriverRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
         {
+            if (!router.Session.IsContinuousReadEnabled)
+                return ApiProblems.ContinuousReadDisabled("Writing");
+
             if (request.Data is not { Length: > 0 })
                 return ApiProblems.BadRequest("'data' must contain at least one byte.", "memory_write_data_required");
 
@@ -68,17 +90,42 @@ public static class DriverEndpoints
         })
         .WithName("WriteDriverRegion")
         .WithSummary("Writes raw bytes directly to a memory region, bypassing property encoding.")
+        .WithDescription("Returns 409 while continuous read mode is disabled.")
         .Produces<SuccessResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .WithTags("Driver");
+    }
+
+    private static DriverRegistration? FindRegistration(IEnumerable<DriverRegistration> registrations, string name) =>
+        registrations.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static DriverResponse CreateDriverResponse(GamehookRouter router, IEnumerable<DriverRegistration> registrations)
+    {
+        var name = router.DriverName!;
+        int? port = null;
+        if (FindRegistration(registrations, name) is { DefaultPort: { } defaultPort })
+        {
+            try
+            {
+                port = NetworkEndpoint.Parse(router.DriverSourcePath, defaultPort, name).Port;
+            }
+            catch (ArgumentException)
+            {
+                // Router keeps an unparseable source when the driver failed to load; report no port.
+            }
+        }
+
+        return new DriverResponse(name, port);
     }
 }
 
 /// <summary>Selects a driver and optional source path.</summary>
 public sealed record SetDriverRequest(
     [property: System.ComponentModel.Description("Driver name to select.")] string Value,
-    [property: System.ComponentModel.Description("Optional driver-specific source path.")] string? Source = null);
+    [property: System.ComponentModel.Description("Optional driver-specific source path.")] string? Source = null,
+    [property: System.ComponentModel.Description("Optional port for network drivers (RetroArch default 55355, SuperShuckie default 55356).")] int? Port = null);
 
 /// <summary>Writes bytes to a memory region at a region-relative offset.</summary>
 public sealed record WriteDriverRequest(

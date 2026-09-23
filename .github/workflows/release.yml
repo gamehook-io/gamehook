@@ -46,6 +46,7 @@ jobs:
       version: ${{ steps.version.outputs.value }}
       tag: ${{ steps.version.outputs.tag }}
       mapper_commit: ${{ steps.mapper.outputs.commit }}
+      mapper_commit_date: ${{ steps.mapper.outputs.commit_date }}
     steps:
       - uses: actions/checkout@v4
       - name: Resolve release version
@@ -73,8 +74,15 @@ jobs:
             echo "::error::Mapper commit must be a full hexadecimal SHA." >&2
             exit 1
           fi
-          echo "Pinning Mapper:Commit to $sha"
+          # Committer date (ISO 8601 UTC) - when the commit landed, not when it was authored.
+          commit_date=$(gh api "repos/${{ env.MAPPERS_REPO }}/commits/$sha" --jq .commit.committer.date)
+          if [ -z "$commit_date" ]; then
+            echo "::error::Could not resolve the commit date for mapper commit $sha." >&2
+            exit 1
+          fi
+          echo "Pinning Mapper:Commit to $sha ($commit_date)"
           echo "commit=$sha" >> "$GITHUB_OUTPUT"
+          echo "commit_date=$commit_date" >> "$GITHUB_OUTPUT"
 
   build:
     needs: resolve
@@ -119,7 +127,8 @@ jobs:
         shell: bash
         run: |
           jq --arg commit "${{ needs.resolve.outputs.mapper_commit }}" \
-             '.Mapper.Commit = $commit | .Mapper.Source = "Proxy"' \
+             --arg commitDate "${{ needs.resolve.outputs.mapper_commit_date }}" \
+             '.Mapper.Commit = $commit | .Mapper.CommitDate = $commitDate | .Mapper.Source = "Proxy"' \
              src/Gamehook.UI/appsettings.json > appsettings.tmp.json
           mv appsettings.tmp.json src/Gamehook.UI/appsettings.json
           cat src/Gamehook.UI/appsettings.json

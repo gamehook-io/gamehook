@@ -21,7 +21,7 @@ public partial class AboutWindow : Window
             ?? typeof(AboutWindow).Assembly.GetName().Version?.ToString();
     }
 
-    public AboutWindow(MapperUpdateService mapperUpdateService, AppUpdateStatusProvider? updateStatus = null,
+    public AboutWindow(MapperUpdateService? mapperUpdateService, AppUpdateStatusProvider? updateStatus = null,
         AppUpdateService? updateService = null) : this()
     {
         this.updateStatus = updateStatus;
@@ -36,10 +36,15 @@ public partial class AboutWindow : Window
         // the card hidden. There's no more human-friendly release tag to show now that mappers
         // are pinned/tracked by commit sha (see MapperUpdateService) - a short sha is what's
         // actually meaningful here.
-        if (mapperUpdateService.GetInstalledManifest() is { } manifest)
+        if (mapperUpdateService?.GetInstalledManifest() is { } manifest)
         {
             MapperVersionText.Text = $"{manifest.Reference} ({manifest.CommitSha[..Math.Min(7, manifest.CommitSha.Length)]})";
             MapperVersionCard.IsVisible = true;
+            if (mapperUpdateService.GetCommitDate(manifest) is { } commitDate)
+            {
+                MapperCommitDateText.Text = $"Committed {commitDate.UtcDateTime:yyyy-MM-dd HH:mm} UTC";
+                MapperCommitDateText.IsVisible = true;
+            }
         }
     }
 

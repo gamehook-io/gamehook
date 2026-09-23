@@ -4,7 +4,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$env:GamehookProfileDirectory = Join-Path ([IO.Path]::GetTempPath()) ('gamehook-smoke-' + [guid]::NewGuid())
 $env:MapperDirectory = [IO.Path]::GetFullPath($MapperPath)
 $env:AppUpdateEnabled = 'false'
 $application = Start-Process -FilePath (Resolve-Path $Binary).Path -PassThru

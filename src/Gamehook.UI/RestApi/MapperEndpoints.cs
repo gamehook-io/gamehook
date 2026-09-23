@@ -32,16 +32,16 @@ public static class MapperEndpoints
             var mappers = filesystemProvider.GetMappers().Select(pair => DescribeMapper(
                 pair.Key,
                 pair.Value,
-                loadedPath is not null && string.Equals(Path.GetFullPath(pair.Value), loadedPath, pathComparison)));
+                loadedPath is not null && string.Equals(Path.GetFullPath(pair.Value.Path), loadedPath, pathComparison)));
             return Results.Ok(mappers);
         })
         .WithName("GetMappers")
         .WithSummary("Lists available mappers and indicates which mapper is loaded.")
-        .WithDescription("The value field is the key to send as value to POST /mapper. An empty list means the configured mapper directory contains no mapper files.")
+        .WithDescription("The value field is the key to send as value to POST /mapper. Custom mappers (the \"user-mappers\" folder in the Gamehook profile directory, plus MapperDirectory when configured) have custom: true and keys prefixed \"custom/\". An empty list means no mapper files were found.")
         .Produces<AvailableMapperResponse[]>(StatusCodes.Status200OK)
         .WithTags("Mapper");
 
-        app.MapGet("/instance", (GamehookRouter router) =>
+        app.MapGet("/instance", (GamehookRouter router, FilesystemProvider filesystemProvider) =>
         {
             if (router.Mapper is not Gamehook.Infrastructure.Mapper mapper)
                 return ApiProblems.NotFound("No mapper is loaded.", "mapper_not_loaded");
@@ -50,8 +50,8 @@ public static class MapperEndpoints
                 mapper.Id,
                 mapper.GameName,
                 mapper.System.Id,
-                mapper.Version,
-                mapper.NativeProcessorId));
+                mapper.NativeProcessorId,
+                filesystemProvider.IsCustomMapperPath(mapper.MapperPath)));
         })
         .WithName("GetInstance")
         .WithSummary("Returns metadata for the active instance, or 404 when no mapper is loaded.")
@@ -65,10 +65,10 @@ public static class MapperEndpoints
                 return ApiProblems.BadRequest("'value' is required.", "mapper_key_required");
 
             var mappers = filesystemProvider.GetMappers();
-            if (!mappers.TryGetValue(request.Value, out var mapperPath))
+            if (!mappers.TryGetValue(request.Value, out var mapperFile))
                 return ApiProblems.NotFound($"Mapper '{request.Value}' was not found.", "mapper_not_found");
 
-            var (success, error) = await router.LoadMapperAsync(mapperPath, cancellationToken).ConfigureAwait(false);
+            var (success, error) = await router.LoadMapperAsync(mapperFile.Path, cancellationToken).ConfigureAwait(false);
             return success
                 ? Results.Ok(new { value = request.Value, status = router.Session.Status })
                 : ApiProblems.Unprocessable(error ?? "Mapper could not be loaded.", "mapper_load_failed");
@@ -82,8 +82,9 @@ public static class MapperEndpoints
         .WithTags("Mapper");
     }
 
-    private static AvailableMapperResponse DescribeMapper(string value, string path, bool loaded)
+    private static AvailableMapperResponse DescribeMapper(string value, MapperFile file, bool loaded)
     {
+        var path = file.Path;
         var name = Path.GetFileNameWithoutExtension(path).Replace('_', ' ');
         try
         {
@@ -93,12 +94,12 @@ public static class MapperEndpoints
                 (string?)root?.Attribute("id"),
                 (string?)root?.Attribute("name") ?? name,
                 (string?)root?.Attribute("platform"),
-                (string?)root?.Attribute("version"),
+                file.IsCustom,
                 loaded);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
-            return new AvailableMapperResponse(value, null, name, null, null, loaded);
+            return new AvailableMapperResponse(value, null, name, null, file.IsCustom, loaded);
         }
     }
 }

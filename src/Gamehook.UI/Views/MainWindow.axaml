@@ -265,6 +265,11 @@
                             <Separator />
                             <MenuItem Header="Exit" Click="ExitMenuItem_Click" />
                         </MenuItem>
+                        <MenuItem Header="Settings">
+                            <MenuItem Header="Continuous Read Mode" ToggleType="CheckBox"
+                                      IsChecked="{Binding IsContinuousReadEnabled, Mode=OneWay}"
+                                      Command="{Binding ToggleContinuousReadCommand}" />
+                        </MenuItem>
                         <MenuItem Header="API">
                             <MenuItem x:Name="ApiDocumentationMenuItem" Header="Open API Documentation"
                                       Click="ApiDocumentationMenuItem_Click" />
@@ -326,19 +331,31 @@
                                    Classes="muted" FontSize="12" LineHeight="19" TextWrapping="Wrap"
                                    HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,20" />
 
-                        <StackPanel Spacing="7">
-                            <TextBlock Text="DRIVER" Classes="eyebrow" />
-                            <ComboBox HorizontalAlignment="Stretch"
-                                      ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
-                                      PlaceholderText="Select a driver...">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:DriverChoice">
-                                        <TextBlock Text="{Binding DisplayName}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Text="Where Gamehook reads memory from." Classes="muted" FontSize="11" />
-                        </StackPanel>
+                        <!-- Port sits beside the driver; its Auto column collapses for drivers without one. -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <StackPanel Grid.Column="0" Spacing="7">
+                                <TextBlock Text="DRIVER" Classes="eyebrow" />
+                                <ComboBox HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
+                                          PlaceholderText="Select a driver...">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:DriverChoice">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Text="Where Gamehook reads memory from." Classes="muted" FontSize="11" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Spacing="7" Width="140" IsVisible="{Binding IsNetworkDriver}">
+                                <TextBlock Text="PORT" Classes="eyebrow" />
+                                <NumericUpDown Value="{Binding DriverPort, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                                               Minimum="1" Maximum="65535" Increment="1" FormatString="0"
+                                               PlaceholderText="{Binding SelectedDriver.DefaultPort, FallbackValue={x:Null}}"
+                                               Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}" />
+                                <TextBlock Text="{Binding DriverPortHint}" Classes="muted" FontSize="11" />
+                            </StackPanel>
+                        </Grid>
 
                         <StackPanel Spacing="7" IsVisible="{Binding IsSaveStateDriver}">
                             <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
@@ -358,10 +375,24 @@
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                 <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
                                           ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
-                                          PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}">
+                                          PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}"
+                                          HorizontalContentAlignment="Stretch">
+                                    <!-- Stretch items so the user-mapper badge can right-align in the dropdown too. -->
+                                    <ComboBox.Styles>
+                                        <Style Selector="ComboBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        </Style>
+                                    </ComboBox.Styles>
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:MapperChoice">
-                                            <TextBlock Text="{Binding DisplayName}" />
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <Border Grid.Column="1" IsVisible="{Binding IsCustom}" Background="#3A2F1A" BorderBrush="#E0A339"
+                                                        BorderThickness="1" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
+                                                    <TextBlock Text="USER MAPPER" FontSize="9" FontWeight="SemiBold" Foreground="#E0A339" />
+                                                </Border>
+                                            </Grid>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
@@ -405,6 +436,24 @@
                     </Border>
 
                 </StackPanel>
+            </Grid>
+
+            <!-- Continuous read mode off: freeze the live workspace behind a scrim. The load screen and
+                 menu stay usable - loading a driver/mapper isn't live data. -->
+            <Grid Grid.Row="2" Background="#CC151617" IsVisible="{Binding IsContinuousReadDisabledOverlayVisible}">
+                <Border MaxWidth="460" Margin="20" Padding="24,20"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{StaticResource SurfaceRaisedBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Continuous read mode disabled" FontSize="15" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Classes="muted" TextWrapping="Wrap" TextAlignment="Center" LineHeight="19"
+                                   Text="Gamehook is paused to save resources. It will only read game memory when responding to API requests." />
+                        <Button Content="Turn on continuous read mode" Classes="action" HorizontalAlignment="Center"
+                                Command="{Binding ToggleContinuousReadCommand}" />
+                    </StackPanel>
+                </Border>
             </Grid>
 
             <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"

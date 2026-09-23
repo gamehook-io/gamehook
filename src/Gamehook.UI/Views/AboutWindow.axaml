@@ -39,6 +39,7 @@
             <StackPanel Spacing="3">
                 <TextBlock Text="MAPPER VERSION" FontSize="9" FontWeight="SemiBold" Foreground="#7F9DC0" LetterSpacing="1" />
                 <TextBlock Name="MapperVersionText" FontSize="12" />
+                <TextBlock Name="MapperCommitDateText" Classes="muted" FontSize="11" IsVisible="False" />
             </StackPanel>
         </Border>
         <Border Background="#191A1C" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12,9">

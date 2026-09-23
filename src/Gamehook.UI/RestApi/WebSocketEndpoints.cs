@@ -28,23 +28,47 @@ public static class WebSocketEndpoints
                 return;
             }
 
+            if (!router.Session.IsContinuousReadEnabled)
+            {
+                await ApiProblems.ContinuousReadDisabled("WebSocket updates")
+                    .ExecuteAsync(context)
+                    .ConfigureAwait(false);
+                return;
+            }
+
             using var socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
             tracker.Add(socket);
             using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+            // Separate from lifetime: cancelling a pending ReceiveAsync aborts the socket outright,
+            // so disabling continuous read mode only stops the pump, leaving the socket open to send a proper
+            // close frame below.
+            using var pumpStop = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             var channel = Channel.CreateUnbounded<IReadOnlyList<PropertyChange>>(
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
             void OnChanged(IReadOnlyList<PropertyChange> changes) => channel.Writer.TryWrite(changes);
+            void OnContinuousReadChanged(bool enabled)
+            {
+                if (enabled) return;
+                try { pumpStop.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
             router.Session.PropertiesChanged += OnChanged;
+            router.Session.ContinuousReadChanged += OnContinuousReadChanged;
+            // Continuous read mode may have been disabled between the check above and subscribing.
+            if (!router.Session.IsContinuousReadEnabled) pumpStop.Cancel();
 
             var receiveTask = DiscardIncomingAsync(socket, lifetime);
             try
             {
-                await PumpChangesAsync(socket, channel.Reader, lifetime.Token).ConfigureAwait(false);
+                await PumpChangesAsync(socket, channel.Reader, pumpStop.Token).ConfigureAwait(false);
+                if (!lifetime.IsCancellationRequested)
+                    await CloseForContinuousReadDisabledAsync(socket, receiveTask).ConfigureAwait(false);
             }
             finally
             {
                 router.Session.PropertiesChanged -= OnChanged;
+                router.Session.ContinuousReadChanged -= OnContinuousReadChanged;
                 lifetime.Cancel();
                 await receiveTask.ConfigureAwait(false);
                 tracker.Remove(socket);
@@ -52,8 +76,9 @@ public static class WebSocketEndpoints
         })
         .WithName("PropertyChangesWebSocket")
         .WithSummary("Streams mapper property changes over WebSocket.")
-        .WithDescription("Connect with ws://127.0.0.1:<port>/ws. After each successful mapper read, the server sends one UTF-8 JSON text frame containing an array of changed properties. Each item has path (slash-free dotted property path), value (decoded value), and bytes (integer array from 0 through 255). No initial snapshot is sent. A normal HTTP request receives ProblemDetails with status 400.")
+        .WithDescription("Connect with ws://127.0.0.1:<port>/ws. After each successful mapper read, the server sends one UTF-8 JSON text frame containing an array of changed properties. Each item has path (slash-free dotted property path), value (decoded value), and bytes (integer array from 0 through 255). No initial snapshot is sent. A normal HTTP request receives ProblemDetails with status 400. While continuous read mode is disabled, upgrade requests receive 409, and disabling it closes open connections with status 1001 (going away).")
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status409Conflict)
         .WithTags("WebSocket");
     }
 
@@ -69,6 +94,27 @@ public static class WebSocketEndpoints
                     await socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (WebSocketException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    // Sends the close frame and gives the client a moment to answer it (DiscardIncomingAsync ends
+    // on the reply) before the caller tears the connection down.
+    private static async Task CloseForContinuousReadDisabledAsync(WebSocket socket, Task receiveTask)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, "Continuous read mode disabled.", timeout.Token).ConfigureAwait(false);
+            await receiveTask.WaitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

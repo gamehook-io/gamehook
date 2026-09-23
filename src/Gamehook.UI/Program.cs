@@ -62,13 +62,15 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 });
 
 #if !DEBUG
-// Loaded last, so it overrides the bundled appsettings.json (and env vars/command-line args)
-// for every key it sets, not just the Mapper:* ones - lets a user pin/override anything without
-// touching the install. Optional: silently absent for everyone who hasn't dropped one in.
+// Overlays the bundled appsettings.json for every key it sets, not just the Mapper:* ones - lets a
+// user pin/override anything without touching the install. Optional: silently absent for everyone
+// who hasn't dropped one in. Environment variables and command-line args are re-added after it so
+// they keep their usual precedence over any JSON file.
 // Debug-only build guard, same reasoning as the updater itself (see CrashGuard/AppUpdateService)
 // - a developer's local run shouldn't pick up whatever's sitting in their real Gamehook profile.
-var profileDirectory = FilesystemProvider.GetGamehookProfileDirectory(builder.Configuration);
-builder.Configuration.AddJsonFile(Path.Combine(profileDirectory, "appsettings.json"), optional: true, reloadOnChange: false);
+builder.Configuration.AddJsonFile(FilesystemProvider.GetProfileSettingsPath(), optional: true, reloadOnChange: false);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 // Opt-in only (e.g. to see startup errors that never made it to a log file yet) - the app has no
 // console subsystem, so without this nothing ever shows one in the first place.
@@ -84,6 +86,14 @@ builder.Services.AddSingleton<MainWindowViewModel>();
 // the GamehookRouter singleton above with the Avalonia UI - not a separate executable.
 builder.Services.AddHostedService<Gamehook.RestApi.GamehookApiHostedService>();
 using var host = builder.Build();
+
+// Applies the configured ContinuousRead setting to the shared session before anything can load a mapper
+// or start polling (see SettingsService).
+host.Services.GetRequiredService<SettingsService>();
+
+// Before host.Start() runs MapperUpdateService: moves an older build's official installation to
+// its new folder, then makes sure the user mapper folder exists so users can find it.
+host.Services.GetRequiredService<FilesystemProvider>().EnsureUserMapperDirectory();
 
 // Blocking: runs registered IHostedServices to completion, in registration order, before the
 // window is created - AppUpdateService's check (Release only) first, then MapperUpdateService -

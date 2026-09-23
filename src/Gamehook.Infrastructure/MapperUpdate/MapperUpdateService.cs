@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
@@ -13,12 +14,12 @@ namespace Gamehook.Infrastructure.MapperUpdate;
 // has finished starting, and this is registered to start after AppUpdateService - see
 // DependencyInjection.cs) so mappers are current before MainWindowViewModel reads them.
 //
-// Only ever touches the *default* managed mapper directory (FilesystemProvider's fallback under
-// the Gamehook profile folder). If MapperDirectory is explicitly configured, that's someone's own
-// mapper checkout - never download over it.
+// Only ever touches the managed official mapper directory (FilesystemProvider's
+// GetOfficialMapperDirectory, "official-mappers" under the Gamehook profile folder). Custom
+// mappers - the "user-mappers" folder and any configured MapperDirectory - are never touched.
 //
 // The mapper repository is hardcoded (not configurable) - this only ever pulls from
-// github.com/gamehook-io/mappers. Everything else is controlled by three "Mapper" config values:
+// github.com/gamehook-io/mappers. Everything else is controlled by these "Mapper" config values:
 //
 //   Mapper:Commit - an exact commit sha. When set, this is exactly what gets installed, no
 //     lookup, no "latest" of anything - a release build should always bake this in (via
@@ -28,6 +29,8 @@ namespace Gamehook.Infrastructure.MapperUpdate;
 //     commit too, and DownloadAndReplaceAsync's full delete+replace means an already-newer
 //     mapper directory downgrades to match it automatically, the same code path that normally
 //     upgrades it.
+//   Mapper:CommitDate - the committer date (ISO 8601, UTC) of Mapper:Commit, baked in alongside it
+//     by the release workflow. Informational only; nothing here reads it.
 //   Mapper:Branch - which branch to track when Commit is unset (dev/local builds). Defaults to
 //     "main".
 //   Mapper:Source - Proxy or Direct: how the *latest commit on Branch* gets resolved when Commit
@@ -53,26 +56,26 @@ public sealed class MapperUpdateService(
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     // For the About window - reads the manifest written after the last successful mapper update
-    // (see WriteManifest below) without re-checking anything over the network. Null if a custom
-    // MapperDirectory is configured (manifests only ever live in the default managed directory)
-    // or nothing has been downloaded there yet.
-    public MapperVersionManifest? GetInstalledManifest() => filesystemProvider.HasCustomMapperDirectory()
-        ? null : ReadManifest(filesystemProvider.GetDefaultMapperDirectory());
+    // (see WriteManifest below) without re-checking anything over the network. Null if nothing
+    // has been downloaded yet.
+    public MapperVersionManifest? GetInstalledManifest() =>
+        ReadManifest(filesystemProvider.GetOfficialMapperDirectory());
+
+    // Mapper:CommitDate describes Mapper:Commit only, so it's returned just when the installed
+    // manifest is that same commit - a branch-tracking build (no pinned commit) has no date.
+    public DateTimeOffset? GetCommitDate(MapperVersionManifest manifest) =>
+        string.Equals(configuration["Mapper:Commit"], manifest.CommitSha, StringComparison.OrdinalIgnoreCase)
+        && DateTimeOffset.TryParse(configuration["Mapper:CommitDate"], CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal, out var commitDate)
+            ? commitDate
+            : null;
 
     public async Task CheckForUpdatesAsync(CancellationToken cancellationToken)
     {
-        var customMapperDirectory = configuration["MapperDirectory"];
-        if (!string.IsNullOrWhiteSpace(customMapperDirectory))
-        {
-            logger.LogInformation("Using custom mapper directory {MapperDirectory}; automatic updates are disabled.", customMapperDirectory);
-            statusProvider.SetSkipped("MapperDirectory is explicitly configured; automatic updates are disabled.");
-            return;
-        }
-
         var branch = configuration["Mapper:Branch"] is { Length: > 0 } b ? b : DefaultBranch;
         var pinnedCommit = configuration["Mapper:Commit"] is { Length: > 0 } c ? c : null;
         var source = ParseSource(configuration["Mapper:Source"]);
-        var mapperDirectory = filesystemProvider.GetDefaultMapperDirectory();
+        var mapperDirectory = filesystemProvider.GetOfficialMapperDirectory();
 
         try
         {

@@ -20,7 +20,8 @@ public sealed class GamehookApiHostedService(
     FilesystemProvider filesystemProvider,
     IConfiguration configuration,
     ILoggerFactory loggerFactory,
-    ApiBindStatus bindStatus) : IHostedService
+    ApiBindStatus bindStatus,
+    SettingsService settings) : IHostedService
 {
     private WebApplication? app;
 
@@ -31,6 +32,7 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton(loggerFactory);
         builder.Services.AddSingleton(router);
         builder.Services.AddSingleton(filesystemProvider);
+        builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
         builder.Services.AddProblemDetails();
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
@@ -43,6 +45,10 @@ public sealed class GamehookApiHostedService(
                 Then connect to `ws://127.0.0.1:<port>/ws` to receive updates. Each successful mapper read sends an array containing only changed properties, with each item's dotted `path`, decoded `value`, and raw `bytes`. The WebSocket sends no initial snapshot. Apply updates to the snapshot by `path`; after reconnecting, call `GET /instance/properties` again.
 
                 A mapper must be loaded before the snapshot or updates are available.
+
+                ## Continuous read mode
+
+                Continuous read mode is on by default. `POST /settings` with `{ "continuousRead": false }` switches to a low-power mode for the current session: the continuous driver read loop stops, `/ws` connections are closed and refused, and writes are refused. `GET /instance/properties` (and single-property GETs) then read the driver on demand, returning values as of that request.
                 """;
             return Task.CompletedTask;
         }));
@@ -62,6 +68,7 @@ public sealed class GamehookApiHostedService(
         app.MapPropertiesEndpoints();
         app.MapDriverEndpoints();
         app.MapHealthEndpoint();
+        app.MapSettingsEndpoints();
         app.MapPropertyChangesWebSocket();
 
         // A bind failure (almost always another Gamehook instance already holding the port) must

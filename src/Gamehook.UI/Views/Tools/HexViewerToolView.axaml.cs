@@ -35,7 +35,7 @@ public partial class HexViewerToolView : UserControl
         };
         HexViewer.ByteEditRequested += async (_, edit) =>
         {
-            if (DataContext is not HexViewerToolViewModel { Main.Mapper: { } mapper })
+            if (DataContext is not HexViewerToolViewModel { Main: { Mapper: { } mapper } main })
             {
                 return;
             }
@@ -46,7 +46,7 @@ public partial class HexViewerToolView : UserControl
                 return;
             }
 
-            var (success, _) = await mapper.WriteRawBytesAsync(edit.RegionId, edit.Address, new[] { edit.NewValue });
+            var (success, _) = await main.Router.WriteDriverRegionAsync(edit.RegionId, edit.Address, new[] { edit.NewValue });
             if (!success)
             {
                 HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);

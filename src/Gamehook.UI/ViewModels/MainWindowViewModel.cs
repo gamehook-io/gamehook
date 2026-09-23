@@ -16,9 +16,6 @@ namespace Gamehook.UI.ViewModels;
 
 public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
-    // Match display updates to a 60 Hz frame budget. RefreshAsync remains non-overlapping, so a
-    // slower driver naturally backs this off instead of queuing reads.
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(16);
     private static readonly IBrush HealthyStatusBrush = new SolidColorBrush(Color.Parse("#47C975"));
     private static readonly IBrush WarningStatusBrush = new SolidColorBrush(Color.Parse("#E0A339"));
     private static readonly IBrush ErrorStatusBrush = new SolidColorBrush(Color.Parse("#E95D5D"));
@@ -26,6 +23,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly GamehookSession session;
     private readonly GamehookRouter router;
     private readonly FilesystemProvider filesystemProvider;
+    private readonly SettingsService settings;
     private readonly RetroArchConfigurationService retroArchConfiguration;
     private readonly DockFactory dockFactory;
     private readonly HexViewerToolViewModel hexViewer;
@@ -47,6 +45,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private string? selectedSaveStatePath;
+
+    // Port for network drivers (RetroArch, SuperShuckie). Prefilled with the port last used for
+    // the selected driver, else its default; cleared means "use the default".
+    [ObservableProperty]
+    private decimal? driverPort;
 
     [ObservableProperty]
     private string status = "Choose a driver and mapper to load.";
@@ -84,6 +87,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string? connectionWarning;
 
+    // Mirrors GamehookSession.IsContinuousReadEnabled. While false only the live parts of the UI freeze: the
+    // workspace (tree values, hex view, read timings) sits behind an overlay and stops refreshing,
+    // while loading a driver/mapper keeps working.
+    [ObservableProperty]
+    private bool isContinuousReadEnabled;
+
+    public bool IsContinuousReadDisabledOverlayVisible => IsWorkspaceVisible && !IsContinuousReadEnabled;
+
+    partial void OnIsContinuousReadEnabledChanged(bool value) => OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
+
     public ObservableCollection<MapperChoice> Mappers { get; } = [];
     public ObservableCollection<DriverChoice> Drivers { get; } = [];
     public ObservableCollection<PropertyTreeNodeViewModel> Tree { get; } = [];
@@ -110,6 +123,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public IRootDock Layout { get; }
 
+    // Writes go through the router so continuous read mode's write block applies to the UI too.
+    public GamehookRouter Router => router;
+
     // Holds the same node instances as Tree (not copies), so a poll tick that refreshes a
     // leaf's DisplayValue in Tree is already reflected here via shared bindings.
     public ObservableCollection<PropertyTreeNodeViewModel> Pinned { get; } = [];
@@ -132,6 +148,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsLoadScreenVisible => !IsConnected && !IsConnecting;
     public bool IsWorkspaceVisible => IsConnected && !IsConnecting;
     public bool IsSaveStateDriver => SelectedDriver?.Name == SaveStateDriver.Name;
+    public bool IsNetworkDriver => SelectedDriver?.DefaultPort is not null;
+    public string DriverPortHint => SelectedDriver?.DefaultPort is { } defaultPort
+        ? $"Default: {defaultPort}"
+        : string.Empty;
+    private int? EffectiveDriverPort => IsNetworkDriver ? (int?)DriverPort ?? SelectedDriver!.DefaultPort : null;
     public bool CanSelectMapper => SelectedDriver is not null
         && (!IsSaveStateDriver || SelectedSaveStatePath is not null);
     public bool IsIdle => Mapper is null && !HasError;
@@ -143,7 +164,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ? "No workspace loaded"
         : Path.GetFileNameWithoutExtension(SelectedMapper.FullPath).Replace('_', ' ');
     public bool HasReadingStatus => IsConnected;
-    public bool HasCustomMapperDirectory => filesystemProvider.HasCustomMapperDirectory();
     public IBrush FooterStatusBrush => Mapper?.ConsecutiveReadFailures switch
     {
         _ when Mapper?.HasConnectionRefusal is true => ErrorStatusBrush,
@@ -156,7 +176,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         : Status;
     public string WindowTitle => Mapper is null
         ? "Gamehook"
-        : $"Gamehook - {Mapper.GameName}";
+        : SelectedMapper?.IsCustom is true
+            ? $"Gamehook - {Mapper.GameName} (User Mapper)"
+            : $"Gamehook - {Mapper.GameName}";
     public string FooterDriverTime => FormatReadTime(Mapper?.LastReadMetrics.Driver);
     public string FooterPropertyTranslationTime => FormatReadTime(Mapper?.LastReadMetrics.PropertyTranslation);
     public string FooterInlineCalculationsTime => FormatReadTime(Mapper?.LastReadMetrics.InlineCalculations);
@@ -195,18 +217,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         GamehookRouter router,
         FilesystemProvider filesystemProvider,
         RetroArchConfigurationService retroArchConfiguration,
+        SettingsService settings,
         IEnumerable<DriverRegistration> driverRegistrations)
     {
         this.session = session;
         this.router = router;
         this.filesystemProvider = filesystemProvider;
         this.retroArchConfiguration = retroArchConfiguration;
+        this.settings = settings;
+        isContinuousReadEnabled = session.IsContinuousReadEnabled;
         session.Changed += OnSessionChanged;
+        session.ContinuousReadChanged += OnContinuousReadChanged;
 
         try
         {
-            foreach (var mapper in filesystemProvider.GetMappers().OrderBy(entry => entry.Key, StringComparer.Ordinal))
-                Mappers.Add(new MapperChoice(mapper.Value, mapper.Key));
+            // Official mappers first, then the user's own from the custom mapper folder.
+            foreach (var mapper in filesystemProvider.GetMappers()
+                         .OrderBy(entry => entry.Value.IsCustom)
+                         .ThenBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                var displayName = mapper.Value.IsCustom
+                    ? mapper.Key[FilesystemProvider.CustomMapperKeyPrefix.Length..]
+                    : mapper.Key;
+                Mappers.Add(new MapperChoice(mapper.Value.Path, displayName, mapper.Value.IsCustom));
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -215,7 +249,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         foreach (var registration in driverRegistrations.OrderBy(r => r.Name, StringComparer.Ordinal))
         {
-            Drivers.Add(new DriverChoice(registration.Name, registration.Name));
+            Drivers.Add(new DriverChoice(registration.Name, registration.Name, registration.DefaultPort));
         }
 
         if (filesystemProvider.GetLastMapperPath() is { } lastMapperPath)
@@ -256,7 +290,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public void RememberLastOpenedSaveStateDirectory(string directory) =>
         filesystemProvider.RememberLastOpenedSaveStateDirectory(directory);
 
-    public string GetMapperDirectory() => filesystemProvider.GetMapperDirectory();
+    public string? GetMapperDirectory() => filesystemProvider.GetPrimaryCustomMapperDirectory();
+
 
     public string? GetLastOpenedMapperDirectory() => filesystemProvider.GetLastOpenedMapperDirectory();
 
@@ -266,7 +301,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         var mapper = Mappers.FirstOrDefault(item => string.Equals(item.FullPath, fullPath, StringComparison.Ordinal));
         if (mapper is null)
         {
-            mapper = new MapperChoice(fullPath, fullPath);
+            // Browsed from anywhere on disk, so not an official mapper.
+            mapper = new MapperChoice(fullPath, fullPath, IsCustom: true);
             Mappers.Add(mapper);
         }
 
@@ -278,7 +314,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool CanLoad() => SelectedDriver is not null
         && SelectedMapper is not null
-        && (!IsSaveStateDriver || SelectedSaveStatePath is not null);
+        && (!IsSaveStateDriver || SelectedSaveStatePath is not null)
+        && (EffectiveDriverPort is not { } port || NetworkEndpoint.IsValidPort(port));
 
     [RelayCommand(CanExecute = nameof(CanLoad))]
     private async Task LoadAsync()
@@ -289,8 +326,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (EffectiveDriverPort is { } port)
+        {
+            filesystemProvider.RememberLastDriverPort(SelectedDriver.Name, port);
+        }
+
         if (SelectedDriver.Name == RetroArchDriver.Name
-            && !await retroArchConfiguration.NetworkCommandsAvailableAsync().ConfigureAwait(true))
+            && !await retroArchConfiguration.NetworkCommandsAvailableAsync(EffectiveDriverPort ?? RetroArchDriver.DefaultPort).ConfigureAwait(true))
         {
             var setup = RetroArchNetworkCommandsUnavailable;
             if (setup is not null && await setup(retroArchConfiguration.FindConfigurationFiles()).ConfigureAwait(true))
@@ -299,7 +341,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                Status = "RetroArch is not answering on Network Commands. Start RetroArch, enable Settings > Network > Network Commands, then try again.";
+                Status = $"RetroArch is not answering on Network Commands (port {EffectiveDriverPort}). Start RetroArch, enable Settings > Network > Network Commands, check the port matches, then try again.";
             }
             return;
         }
@@ -310,15 +352,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task LoadSelectedMapperAsync()
     {
         ClearWorkspace();
-        var (loaded, _) = await router.LoadAsync(
+        // GamehookRouter.LoadAsync starts polling on success.
+        await router.LoadAsync(
             SelectedMapper!.FullPath,
             SelectedDriver!.Name,
-            IsSaveStateDriver ? SelectedSaveStatePath : null).ConfigureAwait(true);
-
-        if (loaded)
-        {
-            session.StartPolling(RefreshInterval);
-        }
+            IsSaveStateDriver ? SelectedSaveStatePath
+                : EffectiveDriverPort is { } port ? NetworkEndpoint.Format(null, port)
+                : null).ConfigureAwait(true);
     }
 
     private bool CanRefresh() => Mapper is not null;
@@ -349,11 +389,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (disposed) return;
         Interlocked.Exchange(ref sessionUpdateQueued, 0);
 
+        // Connection state stays current even with continuous read mode off, so loading a mapper still moves
+        // between the load screen and the workspace.
         Mapper = session.Mapper;
         IsConnecting = session.IsConnecting;
         Status = session.Status;
         DataWarning = session.DataWarning;
         ConnectionWarning = session.ConnectionWarning;
+
+        // Everything below is live data. With continuous read mode off, on-demand API reads still raise
+        // Changed; ignore them - OnContinuousReadChanged catches up once it is back on.
+        if (!IsContinuousReadEnabled) return;
+
         OnPropertyChanged(nameof(FooterStatusBrush));
         OnFooterMetricsChanged();
 
@@ -381,6 +428,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             _ = hexViewer.RefreshAsync();
         }
     }
+
+    // Settings can also change via POST /settings on a Kestrel thread.
+    private void OnContinuousReadChanged(bool enabled)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnContinuousReadChanged(session.IsContinuousReadEnabled));
+            return;
+        }
+
+        if (disposed || IsContinuousReadEnabled == enabled) return;
+        IsContinuousReadEnabled = enabled;
+        // Catch up on whatever changed while frozen (a mapper loaded over the API, new values).
+        if (enabled) ProcessSessionChanged();
+    }
+
+    [RelayCommand]
+    private void ToggleContinuousRead() => settings.Update(!session.IsContinuousReadEnabled);
 
     private void RebuildTree(IMapper activeMapper)
     {
@@ -614,6 +679,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         LoadCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(WorkspaceName));
+        OnPropertyChanged(nameof(WindowTitle));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
         OnFooterMetricsChanged();
@@ -630,9 +696,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         LoadCommand.NotifyCanExecuteChanged();
     }
 
+    partial void OnDriverPortChanged(decimal? value) => LoadCommand.NotifyCanExecuteChanged();
+
     partial void OnSelectedDriverChanged(DriverChoice? value)
     {
+        DriverPort = value?.DefaultPort is { } defaultPort
+            ? filesystemProvider.GetLastDriverPort(value.Name) ?? defaultPort
+            : null;
         OnPropertyChanged(nameof(IsSaveStateDriver));
+        OnPropertyChanged(nameof(IsNetworkDriver));
+        OnPropertyChanged(nameof(DriverPortHint));
         OnPropertyChanged(nameof(CanSelectMapper));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
@@ -652,6 +725,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
+        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
         OnFooterMetricsChanged();
@@ -662,6 +736,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
+        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
     }
 
     partial void OnDataWarningChanged(string? value) => OnPropertyChanged(nameof(HasDataWarning));
@@ -680,6 +755,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
+        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
         OnFooterMetricsChanged();
@@ -833,6 +909,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         explorerSearchCancellation?.Cancel();
         ReplaceSearchTree([]);
         session.Changed -= OnSessionChanged;
+        session.ContinuousReadChanged -= OnContinuousReadChanged;
         session.StopPolling();
         PropertyPanel.Dispose();
         foreach (var leaf in treeLeaves) leaf.PinnedChanged -= OnNodePinnedChanged;
@@ -859,9 +936,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 }
 
-public sealed record DriverChoice(string Name, string DisplayName);
+public sealed record DriverChoice(string Name, string DisplayName, int? DefaultPort = null);
 
-public sealed record MapperChoice(string FullPath, string DisplayName);
+public sealed record MapperChoice(string FullPath, string DisplayName, bool IsCustom = false);
 
 public sealed record SelectionParseViewModel(string Name, string Type, string Value, string? Error)
 {

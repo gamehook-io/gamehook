@@ -24,10 +24,12 @@ public static class DependencyInjection
         services.AddGamehookLogging(configuration);
         services.AddSingleton<DriverRegistration>(new DriverRegistration(
             Drivers.RetroArchDriver.Name,
-            (provider, sourcePath) => new Drivers.RetroArchDriver(sourcePath)));
+            (provider, sourcePath) => new Drivers.RetroArchDriver(sourcePath),
+            Drivers.RetroArchDriver.DefaultPort));
         services.AddSingleton<DriverRegistration>(new DriverRegistration(
             Drivers.SuperShuckieDriver.Name,
-            (provider, sourcePath) => new Drivers.SuperShuckieDriver(sourcePath)));
+            (provider, sourcePath) => new Drivers.SuperShuckieDriver(sourcePath),
+            Drivers.SuperShuckieDriver.DefaultPort));
         services.AddSingleton<DriverRegistration>(new DriverRegistration(
             Drivers.SaveStateDriver.Name,
             (provider, sourcePath) =>
@@ -45,6 +47,10 @@ public static class DependencyInjection
         services.TryAddSingleton<GamehookSession>();
         services.TryAddSingleton<GamehookRouter>();
         services.TryAddSingleton<ApiBindStatus>();
+        services.TryAddSingleton(provider => SettingsService.Create(
+            provider.GetRequiredService<GamehookSession>(),
+            configuration,
+            provider.GetService<ILogger<SettingsService>>()));
 
 #if !DEBUG
         // A Debug build is a developer running from source, or a locally-built test binary -
@@ -59,8 +65,9 @@ public static class DependencyInjection
         services.AddSingleton<AppUpdateStatusProvider>();
         services.AddSingleton<AppUpdateService>();
         services.AddHostedService(provider => provider.GetRequiredService<AppUpdateService>());
-#endif
 
+        // Same Release-only rule for official mappers: Debug builds only ever use MapperDirectory
+        // (see FilesystemProvider.OfficialMappersEnabled), so there is nothing to download.
         services.AddHttpClient(MapperUpdateService.HttpClientName, client =>
         {
             // Required by the GitHub API - requests without a User-Agent are rejected outright.
@@ -71,6 +78,7 @@ public static class DependencyInjection
         services.AddSingleton<MapperUpdateStatusProvider>();
         services.AddSingleton<MapperUpdateService>();
         services.AddHostedService(provider => provider.GetRequiredService<MapperUpdateService>());
+#endif
 
         return services;
     }
@@ -78,12 +86,13 @@ public static class DependencyInjection
     public static IServiceCollection AddGamehookDriver<TDriver>(
         this IServiceCollection services,
         string name,
-        Func<IServiceProvider, string?, TDriver> factory)
+        Func<IServiceProvider, string?, TDriver> factory,
+        int? defaultPort = null)
         where TDriver : class, IDriver
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factory);
-        services.AddSingleton(new DriverRegistration(name, (provider, sourcePath) => factory(provider, sourcePath)));
+        services.AddSingleton(new DriverRegistration(name, (provider, sourcePath) => factory(provider, sourcePath), defaultPort));
         return services;
     }
 
@@ -92,7 +101,7 @@ public static class DependencyInjection
     // the UI/console entry points) gets a real logger via plain DI without depending on Serilog directly.
     private static IServiceCollection AddGamehookLogging(this IServiceCollection services, IConfiguration configuration)
     {
-        var logDirectory = FilesystemProvider.GetLogDirectory(configuration);
+        var logDirectory = FilesystemProvider.GetLogDirectory();
         var serilogLogger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .ReadFrom.Configuration(configuration)

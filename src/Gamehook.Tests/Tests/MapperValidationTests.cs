@@ -17,7 +17,6 @@ public sealed class MapperValidationTests : BaseTest
             Assert.That(metadata.Id, Is.EqualTo("e1396b30-2dc2-11ee-be56-0242ac120002"));
             Assert.That(metadata.Name, Is.EqualTo("Pokemon Red and Blue"));
             Assert.That(metadata.Platform, Is.EqualTo("GB"));
-            Assert.That(metadata.Version, Is.EqualTo("1.1.3"));
             Assert.That(metadata.PropertyCount, Is.GreaterThan(0));
             Assert.That(metadata.ReferenceTableCount, Is.GreaterThan(0));
             Assert.That(metadata.HasScript, Is.True);

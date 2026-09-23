@@ -18,6 +18,10 @@ public sealed class GamehookSession : IDisposable
     private readonly ILogger<GamehookSession> logger;
     private readonly SemaphoreSlim refreshGate = new(1, 1);
     private CancellationTokenSource? pollingCts;
+    // Interval a host asked to poll at. Kept separately from pollingCts so disabling continuous
+    // read mode can stop the loop without forgetting it, and re-enabling it resumes at the same
+    // cadence.
+    private TimeSpan? requestedPollingInterval;
     private IDriver? hexDriver;
     private int generation;
     private bool disposed;
@@ -34,6 +38,13 @@ public sealed class GamehookSession : IDisposable
     public string? ConnectionWarning { get; private set; }
 
     public bool IsConnected => Mapper is not null && !Status.StartsWith("Error:", StringComparison.Ordinal);
+
+    // Continuous read mode: poll the driver continuously and push changes to subscribers. When
+    // off, the poll loop is stopped and the driver is only read on demand (see ReadOnDemandAsync);
+    // GamehookRouter refuses writes and hosts are expected to refuse websocket subscriptions.
+    public bool IsContinuousReadEnabled { get; private set; } = true;
+
+    public event Action<bool>? ContinuousReadChanged;
 
     // Fires after any state change (load start/end, a read tick, a warning changing).
     public event Action? Changed;
@@ -120,14 +131,26 @@ public sealed class GamehookSession : IDisposable
 
     // Safe to call re-entrantly (e.g. a host's own timer racing a manual "refresh now"): a refresh
     // already in flight makes this a no-op instead of racing the same driver read.
-    public async Task<bool> RefreshAsync(CancellationToken cancellationToken = default)
+    public Task<bool> RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshCoreAsync(waitForInFlightRead: false, cancellationToken);
+
+    // A point-in-time read for when continuous read mode is off: unlike RefreshAsync, waits for an
+    // in-flight read instead of skipping, so a caller always gets values read at (or after) its request.
+    public Task<bool> ReadOnDemandAsync(CancellationToken cancellationToken = default) =>
+        RefreshCoreAsync(waitForInFlightRead: true, cancellationToken);
+
+    private async Task<bool> RefreshCoreAsync(bool waitForInFlightRead, CancellationToken cancellationToken)
     {
         if (Mapper is not { } activeMapper)
         {
             return false;
         }
 
-        if (!await refreshGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        if (waitForInFlightRead)
+        {
+            await refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else if (!await refreshGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }
@@ -149,7 +172,9 @@ public sealed class GamehookSession : IDisposable
             catch (Exception ex)
             {
                 if (!ReferenceEquals(Mapper, activeMapper)) return false;
-                StopPolling();
+                // Stop the loop but keep the requested interval, so toggling continuous read mode back on
+                // retries the read instead of leaving the session stuck until a reload.
+                StopPollLoop();
                 Status = FormatExceptionStatus(ex);
                 logger.LogError(ex, "Read failed for mapper {Mapper}.", activeMapper.GameName);
                 Changed?.Invoke();
@@ -184,12 +209,42 @@ public sealed class GamehookSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
-        StopPolling();
+        StopPollLoop();
+        requestedPollingInterval = interval;
+        if (IsContinuousReadEnabled) StartPollLoop(interval);
+    }
+
+    public void StopPolling()
+    {
+        requestedPollingInterval = null;
+        StopPollLoop();
+    }
+
+    public void SetContinuousRead(bool enabled)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if (IsContinuousReadEnabled == enabled) return;
+
+        IsContinuousReadEnabled = enabled;
+        if (!enabled)
+        {
+            StopPollLoop();
+        }
+        else if (requestedPollingInterval is { } interval && Mapper is not null)
+        {
+            StartPollLoop(interval);
+        }
+
+        ContinuousReadChanged?.Invoke(enabled);
+    }
+
+    private void StartPollLoop(TimeSpan interval)
+    {
         pollingCts = new CancellationTokenSource();
         _ = PollLoopAsync(interval, pollingCts.Token);
     }
 
-    public void StopPolling()
+    private void StopPollLoop()
     {
         pollingCts?.Cancel();
         pollingCts?.Dispose();

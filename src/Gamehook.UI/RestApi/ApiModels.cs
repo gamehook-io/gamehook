@@ -12,8 +12,8 @@ public sealed record LoadedMapperResponse(
     [property: Description("Mapper identifier from its definition.")] string? Id,
     [property: Description("Display name of the game.")] string Name,
     [property: Description("Target platform identifier.")] string Platform,
-    [property: Description("Mapper definition version, when specified.")] string? Version,
-    [property: Description("Native processor identifier, when used.")] string? NativeProcessor);
+    [property: Description("Native processor identifier, when used.")] string? NativeProcessor,
+    [property: Description("True when the mapper is not an official one (user-mappers folder, MapperDirectory, or elsewhere on disk).")] bool Custom);
 
 /// <summary>An available mapper that can be loaded with POST /mapper.</summary>
 public sealed record AvailableMapperResponse(
@@ -21,7 +21,7 @@ public sealed record AvailableMapperResponse(
     string? Id,
     string Name,
     string? Platform,
-    string? Version,
+    [property: Description("True for custom mappers (user-mappers folder or MapperDirectory) rather than the official set.")] bool Custom,
     bool Loaded);
 
 /// <summary>Full value and metadata for one mapper property.</summary>
@@ -40,8 +40,10 @@ public sealed record PropertyResponse(
 /// <summary>Successful write result.</summary>
 public sealed record SuccessResponse(bool Success);
 
-/// <summary>Selected driver name.</summary>
-public sealed record DriverResponse(string Value);
+/// <summary>Selected driver.</summary>
+public sealed record DriverResponse(
+    [property: Description("Selected driver name.")] string Value,
+    [property: Description("Port the driver connects to, for network drivers.")] int? Port = null);
 
 /// <summary>Mapper load result.</summary>
 public sealed record MapperLoadResponse(string Value, string Status);
@@ -59,3 +61,11 @@ public sealed class WritePropertyRequest
     [Description("Raw property bytes to write. Each integer must be from 0 through 255. Must not be supplied with value.")]
     public JsonElement Bytes { get; init; }
 }
+
+/// <summary>Runtime-changeable Gamehook settings.</summary>
+public sealed record SettingsResponse(
+    [property: Description("Whether Gamehook continuously reads the driver. WebSocket updates and writes require it.")] bool ContinuousRead);
+
+/// <summary>Changes settings. Omitted fields are left unchanged.</summary>
+public sealed record UpdateSettingsRequest(
+    [property: Description("Enable or disable continuous read mode.")] bool? ContinuousRead = null);
