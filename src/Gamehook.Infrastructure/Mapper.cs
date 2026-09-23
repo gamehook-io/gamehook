@@ -100,6 +100,8 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     private sealed record CopyBinding(Property Destination, string SourceSuffix);
 
     public string MapperPath { get; }
+    public string? Id { get; }
+    public string? Version { get; }
     public string? NativeProcessorId { get; }
     public GameSystem System => system;
     public string MapperFileName => Path.GetFileName(MapperPath);
@@ -158,6 +160,8 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
 
         system = GameSystem.All.SingleOrDefault(x => x.Id == (string?)root.Attribute("platform"))
             ?? throw new NotSupportedException($"Unsupported mapper platform '{(string?)root.Attribute("platform")}'.");
+        Id = (string?)root.Attribute("id");
+        Version = (string?)root.Attribute("version");
         GameName = (string?)root.Attribute("name") ?? Path.GetFileNameWithoutExtension(MapperPath).Replace('_', ' ');
         NativeProcessorId = (string?)root.Attribute("nativeProcessor");
         this.driver = driver;

@@ -32,24 +32,36 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton(router);
         builder.Services.AddSingleton(filesystemProvider);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
-        builder.Services.AddOpenApi();
+        builder.Services.AddProblemDetails();
+        builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
+        {
+            document.Info.Description = """
+                ## Read instance properties
+
+                Call `GET /instance/properties` once to get a full snapshot of the loaded mapper's properties. The response is a nested JSON object; dots in mapper property paths become nested objects.
+
+                Then connect to `ws://127.0.0.1:<port>/ws` to receive updates. Each successful mapper read sends an array containing only changed properties, with each item's dotted `path`, decoded `value`, and raw `bytes`. The WebSocket sends no initial snapshot. Apply updates to the snapshot by `path`; after reconnecting, call `GET /instance/properties` again.
+
+                A mapper must be loaded before the snapshot or updates are available.
+                """;
+            return Task.CompletedTask;
+        }));
 
         var port = configuration.GetValue<int>("Port");
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
         app = builder.Build();
+        app.UseExceptionHandler();
+        app.UseStatusCodePages();
         app.MapOpenApi();
-        app.MapScalarApiReference("/", options =>
+        app.MapScalarApiReference("/scalar", options =>
         {
-            // Trim the client-picker down to what's actually useful for this API instead of
-            // Scalar's full ~30-client default list.
-            options.EnabledTargets = [ScalarTarget.Shell, ScalarTarget.JavaScript, ScalarTarget.Node, ScalarTarget.CSharp];
-            options.EnabledClients = [ScalarClient.Curl, ScalarClient.Fetch, ScalarClient.HttpClient];
-            options.WithDefaultHttpClient(ScalarTarget.Shell, ScalarClient.Curl);
+            options.DefaultOpenAllTags = true;
         });
         app.MapMapperEndpoints();
         app.MapPropertiesEndpoints();
         app.MapDriverEndpoints();
+        app.MapHealthEndpoint();
         app.MapPropertyChangesWebSocket();
 
         // A bind failure (almost always another Gamehook instance already holding the port) must
@@ -71,6 +83,8 @@ public sealed class GamehookApiHostedService(
 
         loggerFactory.CreateLogger("Gamehook.RestApi")
             .LogInformation("REST API listening on http://127.0.0.1:{Port}.", port);
+        loggerFactory.CreateLogger("Gamehook.RestApi")
+            .LogInformation("API documentation: http://127.0.0.1:{Port}/scalar.", port);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

@@ -97,6 +97,8 @@ public static class DependencyInjection
             .MinimumLevel.Information()
             .ReadFrom.Configuration(configuration)
             .Enrich.FromLogContext()
+            .WriteTo.Console(
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
             .WriteTo.File(
                 Path.Combine(logDirectory, "gamehook-.log"),
                 rollingInterval: RollingInterval.Day,
@@ -108,9 +110,7 @@ public static class DependencyInjection
 
         services.AddLogging(logging =>
         {
-            // Default host logging providers write to the console, which would collide with the
-            // Spectre.Console/Avalonia UI rendering to the same output - the rolling file sink is
-            // the only provider these apps need.
+            // Use Serilog sinks for both console and rolling file output.
             logging.ClearProviders();
             logging.AddSerilog(serilogLogger, dispose: true);
         });

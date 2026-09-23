@@ -10,58 +10,89 @@ public static class PropertiesEndpoints
 {
     public static void MapPropertiesEndpoints(this WebApplication app)
     {
-        app.MapGet("/properties", (HttpContext http, GamehookRouter router) =>
+        app.MapGet("/instance/properties", (GamehookRouter router) =>
         {
             if (router.Properties is not { } properties)
-                return Results.BadRequest(new { error = "No mapper loaded." });
+                return ApiProblems.NotFound("No mapper is loaded.", "mapper_not_loaded");
 
-            var extended = http.Request.Query.ContainsKey("extended");
-            return Results.Ok(BuildNestedTree(properties, extended));
+            return Results.Ok(BuildNestedTree(properties));
         })
-        .WithName("GetAllProperties")
-        .WithSummary("Reads every property's value as a nested JSON object. Add ?extended for the full object (value, bytes, and metadata) per property.")
-        .WithTags("Properties");
+        .WithName("GetInstanceProperties")
+        .WithSummary("Reads every property's value as a nested JSON object.")
+        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded.")
+        .Produces<Dictionary<string, object?>>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .WithTags("Instance");
 
-        app.MapGet("/properties/{*path}", (string path, HttpContext http, GamehookRouter router) =>
+        app.MapGet("/instance/properties/{*path}", (
+            string path,
+            [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the decoded property value.")] string? value,
+            [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the property bytes as integer array.")] string? bytes,
+            GamehookRouter router) =>
         {
             var name = PathToPropertyName(path);
             if (!router.TryGetProperty(name, out var property))
-                return Results.NotFound(new { error = $"Property '{path}' was not found." });
+                return ApiProblems.NotFound($"Property '{path}' was not found.", "property_not_found");
 
-            if (http.Request.Query.ContainsKey("value")) return Results.Ok(property.Value);
-            if (http.Request.Query.ContainsKey("bytes")) return Results.Ok(property.Bytes.ToArray());
+            if (value is not null && bytes is not null)
+                return ApiProblems.BadRequest("Use only one of 'value' or 'bytes'.", "property_selector_conflict");
+            if (value is not null) return Results.Ok(property.Value);
+            if (bytes is not null) return Results.Ok(property.Bytes.ToArray().Select(item => (int)item).ToArray());
             return Results.Ok(ToJson(property));
         })
-        .WithName("GetProperty")
+        .WithName("GetInstanceProperty")
         .WithSummary("Reads one property. Add ?value or ?bytes to get just that field instead of the full object.")
-        .WithTags("Properties");
+        .WithDescription("Without a query selector, returns property metadata, decoded value, bytes, and hexadecimal bytes. ?value returns only the decoded value; ?bytes returns only the byte array. The value JSON type depends on the property type.")
+        .Produces<PropertyResponse>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .WithTags("Instance");
 
-        app.MapPost("/properties/{*path}", async (string path, WritePropertyRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
+        app.MapPost("/instance/properties/{*path}", async (string path, WritePropertyRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
         {
             var name = PathToPropertyName(path);
             if (!router.TryGetProperty(name, out var property))
-                return Results.NotFound(new { error = $"Property '{path}' was not found." });
+                return ApiProblems.NotFound($"Property '{path}' was not found.", "property_not_found");
 
-            if (request.Value is null && request.Bytes is null)
-                return Results.BadRequest(new { error = "One of 'value' or 'bytes' is required." });
+            var hasValue = request.Value.ValueKind != System.Text.Json.JsonValueKind.Undefined;
+            var hasBytes = request.Bytes.ValueKind != System.Text.Json.JsonValueKind.Undefined;
+            if (hasValue == hasBytes)
+                return ApiProblems.BadRequest("Supply exactly one of 'value' or 'bytes'.", "property_write_input_invalid");
 
             (bool Success, string? Error) result;
-            if (request.Bytes is { Length: > 0 })
+            if (hasBytes)
             {
-                var bytes = new byte[request.Bytes.Length];
-                for (var i = 0; i < request.Bytes.Length; i++) bytes[i] = checked((byte)request.Bytes[i]);
+                if (request.Bytes.ValueKind != System.Text.Json.JsonValueKind.Array)
+                    return ApiProblems.BadRequest("'bytes' must be an array of integers from 0 to 255.", "property_bytes_invalid");
+
+                byte[] bytes;
+                try
+                {
+                    bytes = request.Bytes.EnumerateArray().Select(item => item.GetByte()).ToArray();
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException)
+                {
+                    return ApiProblems.BadRequest("'bytes' must be an array of integers from 0 to 255.", "property_bytes_invalid");
+                }
                 result = await router.WritePropertyBytesAsync(property, bytes, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                result = await router.WritePropertyValueAsync(name, request.Value, cancellationToken).ConfigureAwait(false);
+                result = await router.WritePropertyValueAsync(name, ToValue(request.Value), cancellationToken).ConfigureAwait(false);
             }
 
-            return result.Success ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = result.Error });
+            return result.Success
+                ? Results.Ok(new SuccessResponse(true))
+                : ApiProblems.Unprocessable(result.Error ?? "Property write failed.", "property_write_failed");
         })
-        .WithName("WriteProperty")
+        .WithName("WriteInstanceProperty")
         .WithSummary("Writes a property's value or raw bytes back to the device. Supply exactly one of 'value' or 'bytes'.")
-        .WithTags("Properties");
+        .WithDescription("For value writes, supply the JSON value accepted by the mapper property, for example { \"value\": \"Red\" }. For byte writes, supply integers from 0 through 255, for example { \"bytes\": [12, 34] }. Supply exactly one field; both or neither returns 400.")
+        .Produces<SuccessResponse>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+        .WithTags("Instance");
     }
 
     // Mapper property names are dot-separated (e.g. "party.0.nickname"); the REST path uses '/'
@@ -69,7 +100,7 @@ public static class PropertiesEndpoints
     private static string PathToPropertyName(string path) => path.Replace('/', '.');
 
     // Turns the flat "player.name" -> value map into a nested { player: { name: value } } tree.
-    private static Dictionary<string, object?> BuildNestedTree(IReadOnlyDictionary<string, IProperty> properties, bool extended)
+    private static Dictionary<string, object?> BuildNestedTree(IReadOnlyDictionary<string, IProperty> properties)
     {
         var root = new Dictionary<string, object?>(StringComparer.Ordinal);
 
@@ -89,25 +120,34 @@ public static class PropertiesEndpoints
                 node = childNode;
             }
 
-            node[segments[^1]] = extended ? ToJson(property) : property.Value;
+            node[segments[^1]] = property.Value;
         }
 
         return root;
     }
 
-    private static object ToJson(IProperty property) => new
+    private static PropertyResponse ToJson(IProperty property) => new(
+        property.Name,
+        property.Type,
+        property.Address,
+        property.Length,
+        property.Region,
+        property.Bits,
+        property.Reference,
+        property.Value,
+        property.Bytes.ToArray().Select(value => (int)value).ToArray(),
+        property.RawBytesHex);
+
+    private static object? ToValue(System.Text.Json.JsonElement value) => value.ValueKind switch
     {
-        name = property.Name,
-        type = property.Type,
-        address = property.Address,
-        length = property.Length,
-        region = property.Region,
-        bits = property.Bits,
-        reference = property.Reference,
-        value = property.Value,
-        bytes = property.Bytes.ToArray(),
-        rawBytesHex = property.RawBytesHex,
+        System.Text.Json.JsonValueKind.Null => null,
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.String => value.GetString(),
+        System.Text.Json.JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+        System.Text.Json.JsonValueKind.Number => value.GetDouble(),
+        System.Text.Json.JsonValueKind.Array => value.EnumerateArray().Select(ToValue).ToArray(),
+        System.Text.Json.JsonValueKind.Object => value.EnumerateObject().ToDictionary(p => p.Name, p => ToValue(p.Value)),
+        _ => null,
     };
 }
-
-public sealed record WritePropertyRequest(object? Value = null, int[]? Bytes = null);

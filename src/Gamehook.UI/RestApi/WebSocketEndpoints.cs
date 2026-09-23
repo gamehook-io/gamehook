@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Gamehook.RestApi;
 
-// Pushes property changes over a websocket instead of making clients poll GET /properties. One
+// Pushes property changes over a websocket instead of making clients poll GET /instance/properties. One
 // JSON array per successful read tick, containing only the properties whose value/bytes changed -
 // same GamehookSession.PropertiesChanged diff the REST API's Kestrel instance already computes.
 public static class WebSocketEndpoints
@@ -18,11 +18,13 @@ public static class WebSocketEndpoints
     {
         app.UseWebSockets();
 
-        app.Map("/ws", async (HttpContext context, GamehookRouter router, WebSocketConnectionTracker tracker) =>
+        app.MapGet("/ws", async (HttpContext context, GamehookRouter router, WebSocketConnectionTracker tracker) =>
         {
             if (!context.WebSockets.IsWebSocketRequest)
             {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await ApiProblems.BadRequest("Connect to this endpoint using a WebSocket upgrade request.", "websocket_upgrade_required")
+                    .ExecuteAsync(context)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -49,8 +51,10 @@ public static class WebSocketEndpoints
             }
         })
         .WithName("PropertyChangesWebSocket")
-        .WithSummary("Upgrades to a websocket. After every successful read tick, pushes a JSON array of changed properties: [{ path, value, bytes }].")
-        .WithTags("Properties");
+        .WithSummary("Streams mapper property changes over WebSocket.")
+        .WithDescription("Connect with ws://127.0.0.1:<port>/ws. After each successful mapper read, the server sends one UTF-8 JSON text frame containing an array of changed properties. Each item has path (slash-free dotted property path), value (decoded value), and bytes (integer array from 0 through 255). No initial snapshot is sent. A normal HTTP request receives ProblemDetails with status 400.")
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .WithTags("WebSocket");
     }
 
     private static async Task PumpChangesAsync(WebSocket socket, ChannelReader<IReadOnlyList<PropertyChange>> reader, CancellationToken cancellationToken)
@@ -110,6 +114,6 @@ public static class WebSocketEndpoints
     {
         path = change.Path,
         value = change.Value,
-        bytes = change.Bytes,
+        bytes = change.Bytes.Select(value => (int)value).ToArray(),
     };
 }
