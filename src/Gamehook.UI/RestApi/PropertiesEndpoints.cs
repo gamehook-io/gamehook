@@ -10,9 +10,12 @@ public static class PropertiesEndpoints
 {
     public static void MapPropertiesEndpoints(this WebApplication app)
     {
-        app.MapGet("/instance/properties", async (GamehookRouter router, CancellationToken cancellationToken) =>
+        app.MapGet("/instance/properties", async (
+            [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("With continuous read mode off, read the driver before answering. Ignored while continuous read mode is on.")] bool? read,
+            GamehookRouter router,
+            CancellationToken cancellationToken) =>
         {
-            if (await ReadOnDemandAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
+            if (read is true && await ReadNowAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
                 return readProblem;
             if (router.Properties is not { } properties)
                 return ApiProblems.NotFound("No mapper is loaded.", "mapper_not_loaded");
@@ -21,7 +24,7 @@ public static class PropertiesEndpoints
         })
         .WithName("GetInstanceProperties")
         .WithSummary("Reads every property's value as a nested JSON object.")
-        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded. While continuous read mode is disabled, the driver is read at request time; 503 if that read fails.")
+        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded. Values come from the last driver read - continuously refreshed while continuous read mode is on, otherwise as of the last on-demand read. With continuous read mode off, ?read=true reads the driver first (503 if that read fails); it is ignored while continuous read mode is on.")
         .Produces<Dictionary<string, object?>>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
@@ -31,10 +34,11 @@ public static class PropertiesEndpoints
             string path,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the decoded property value.")] string? value,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the property bytes as integer array.")] string? bytes,
+            [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("With continuous read mode off, read the driver before answering. Ignored while continuous read mode is on.")] bool? read,
             GamehookRouter router,
             CancellationToken cancellationToken) =>
         {
-            if (await ReadOnDemandAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
+            if (read is true && await ReadNowAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
                 return readProblem;
 
             var name = PathToPropertyName(path);
@@ -49,7 +53,7 @@ public static class PropertiesEndpoints
         })
         .WithName("GetInstanceProperty")
         .WithSummary("Reads one property. Add ?value or ?bytes to get just that field instead of the full object.")
-        .WithDescription("Without a query selector, returns property metadata, decoded value, bytes, and hexadecimal bytes. ?value returns only the decoded value; ?bytes returns only the byte array. The value JSON type depends on the property type. While continuous read mode is disabled, the driver is read at request time; 503 if that read fails.")
+        .WithDescription("Without a query selector, returns property metadata, decoded value, bytes, and hexadecimal bytes. ?value returns only the decoded value; ?bytes returns only the byte array. The value JSON type depends on the property type. Values come from the last driver read. With continuous read mode off, ?read=true reads the driver first (combine with a selector as ?value&read=true; 503 if that read fails); it is ignored while continuous read mode is on.")
         .Produces<PropertyResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
@@ -107,9 +111,10 @@ public static class PropertiesEndpoints
         .WithTags("Instance");
     }
 
-    // Continuous read mode keeps the mapper's values fresh on its own; with it disabled nothing polls the
-    // driver, so read it now to answer with values as of this request. Null means "go ahead".
-    private static async Task<IResult?> ReadOnDemandAsync(GamehookRouter router, CancellationToken cancellationToken)
+    // ?read=true with continuous read mode off: read the driver now so the answer reflects this
+    // request. Ignored while continuous read mode is on - the poll loop already keeps values fresh.
+    // Without it, GETs never touch the driver. Null means "go ahead".
+    private static async Task<IResult?> ReadNowAsync(GamehookRouter router, CancellationToken cancellationToken)
     {
         var session = router.Session;
         if (session.IsContinuousReadEnabled || session.Mapper is not { } mapper) return null;

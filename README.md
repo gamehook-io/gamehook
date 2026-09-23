@@ -44,7 +44,7 @@ The default profile is `Gamehook` under the operating system's local application
 | `Mapper:Source` | `Direct` resolves the branch through GitHub; `Proxy` uses `Mapper:ProxyUrl`. |
 | `AppUpdateEnabled` | Disables app update checks when set to `false`. |
 | `AppUpdateFeedUrl` | Optional custom HTTPS Velopack feed. Without it, updates use this project's public GitHub Releases. |
-| `ContinuousRead` | Defaults to `true`. When `false`, Gamehook stops its continuous driver read loop, freezes the live workspace, refuses WebSocket connections and writes, and reads the driver only when `GET /instance/properties` (or a single property) is requested. Toggle it with **Settings > Continuous Read Mode** or `POST /settings` with `{ "continuousRead": false }`; either change lasts for the current session only and is never written back to `appsettings.json`. |
+| `ContinuousRead` | Defaults to `true`. When `false`, Gamehook stops its continuous driver read loop and refuses WebSocket connections and writes. The workspace stays usable and shows the last-read values; **Read** reads once. Property GETs return the last-read values; add `?read=true` (e.g. `GET /instance/properties?read=true`) to read the driver first. `?read=true` is ignored while continuous read mode is on. Toggle it with **Settings > Continuous Read Mode** or `POST /settings` with `{ "continuousRead": false }`; either change lasts for the current session only and is never written back to `appsettings.json`. |
 
 App updates run only in installed Release builds. A downloaded update can be applied from **Help > About Gamehook > Restart to update**. `--recover` checks for a replacement before starting the UI; add `--feed https://example.com/releases` when using a custom recovery feed.
 

@@ -48,7 +48,7 @@ public sealed class GamehookApiHostedService(
 
                 ## Continuous read mode
 
-                Continuous read mode is on by default. `POST /settings` with `{ "continuousRead": false }` switches to a low-power mode for the current session: the continuous driver read loop stops, `/ws` connections are closed and refused, and writes are refused. `GET /instance/properties` (and single-property GETs) then read the driver on demand, returning values as of that request.
+                Continuous read mode is on by default. `POST /settings` with `{ "continuousRead": false }` switches to a low-power mode for the current session: the continuous driver read loop stops, `/ws` connections are closed and refused, and writes are refused. `GET /instance/properties` (and single-property GETs) then return the values from the last read; add `?read=true` to read the driver first and get values as of that request.
                 """;
             return Task.CompletedTask;
         }));

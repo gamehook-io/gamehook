@@ -118,6 +118,16 @@ public sealed class ContinuousReadModeTests
                 var initial = await http.GetFromJsonAsync<JsonObject>("/settings/");
                 Assert.That((bool)initial!["continuousRead"]!, Is.True);
 
+                // Freeze the poll loop so the read count is stable, then check ?read=true is a no-op
+                // while continuous read mode is on.
+                session.StopPolling();
+                // Waits out any poll read still in flight (it shares the read gate) before counting.
+                await session.ReadOnDemandAsync();
+                var readsWhileOn = mapper.Reads;
+                var ignoredRead = await http.GetAsync("/instance/properties?read=true");
+                Assert.That(ignoredRead.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(mapper.Reads, Is.EqualTo(readsWhileOn), "?read=true is ignored while continuous read mode is on");
+
                 using var socket = new ClientWebSocket();
                 await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws"), CancellationToken.None);
 
@@ -137,9 +147,13 @@ public sealed class ContinuousReadModeTests
                     refused.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws"), CancellationToken.None));
 
                 var readsBefore = mapper.Reads;
-                var properties = await http.GetAsync("/instance/properties/");
+                var properties = await http.GetAsync("/instance/properties");
                 Assert.That(properties.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-                Assert.That(mapper.Reads, Is.EqualTo(readsBefore + 1), "GET reads the driver on demand");
+                Assert.That(mapper.Reads, Is.EqualTo(readsBefore), "a plain GET returns last-read values without reading");
+
+                var readProperties = await http.GetAsync("/instance/properties?read=true");
+                Assert.That(readProperties.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(mapper.Reads, Is.EqualTo(readsBefore + 1), "?read=true reads the driver first");
 
                 var write = await http.PostAsJsonAsync("/instance/properties/anything", new { value = 1 });
                 Assert.That(write.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));

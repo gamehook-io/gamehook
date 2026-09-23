@@ -19,7 +19,7 @@ public static class SettingsEndpoints
             Results.Ok(ToResponse(settings.Update(request.ContinuousRead))))
         .WithName("UpdateSettings")
         .WithSummary("Changes settings for the current session.")
-        .WithDescription("Only supplied fields are changed. Changes apply immediately and are not saved; the next launch starts from appsettings.json again. continuousRead: false stops the continuous driver read loop, closes and refuses WebSocket connections, and refuses writes; property GETs then read the driver on demand. continuousRead: true resumes continuous reads.")
+        .WithDescription("Only supplied fields are changed. Changes apply immediately and are not saved; the next launch starts from appsettings.json again. continuousRead: false stops the continuous driver read loop, closes and refuses WebSocket connections, and refuses writes; property GETs return the last-read values (add ?read=true to read the driver first). continuousRead: true resumes continuous reads.")
         .Produces<SettingsResponse>(StatusCodes.Status200OK)
         .WithTags("Settings");
     }

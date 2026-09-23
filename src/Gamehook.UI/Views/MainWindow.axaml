@@ -417,11 +417,26 @@
                 <controls:LoadingOverlay Text="Connecting…" />
             </Grid>
 
-            <Grid Grid.Row="2" Margin="6,6,6,5"
+            <Grid Grid.Row="2" Margin="6,6,6,5" RowDefinitions="Auto,*"
                   IsVisible="{Binding IsWorkspaceVisible}">
-                <DockControl Layout="{Binding Layout}" IsDockingEnabled="False" />
+                <!-- Continuous read mode off: the workspace stays usable with the last-read values. -->
+                <Border Grid.Row="0" Margin="0,0,0,6" Padding="10,6" Background="{StaticResource SurfaceRaisedBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        IsVisible="{Binding IsReadOnDemandBannerVisible}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="muted" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Text="Continuous read mode is off. Values show the last read and won't update on their own." />
+                        <Button Grid.Column="1" Content="Turn on continuous read" Classes="secondary" MinHeight="26" Padding="12,3"
+                                Command="{Binding ToggleContinuousReadCommand}" />
+                        <Button Grid.Column="2" Content="Read" Classes="action" MinHeight="26" Padding="16,3"
+                                ToolTip.Tip="Read the driver once and update every value."
+                                Command="{Binding ReadNowCommand}" />
+                    </Grid>
+                </Border>
 
-                <StackPanel VerticalAlignment="Top">
+                <DockControl Grid.Row="1" Layout="{Binding Layout}" IsDockingEnabled="False" />
+
+                <StackPanel Grid.Row="1" VerticalAlignment="Top">
                     <Border Padding="10,7" Background="{StaticResource WarningSoftBrush}"
                             BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
                             IsVisible="{Binding HasDataWarning}">
@@ -436,24 +451,6 @@
                     </Border>
 
                 </StackPanel>
-            </Grid>
-
-            <!-- Continuous read mode off: freeze the live workspace behind a scrim. The load screen and
-                 menu stay usable - loading a driver/mapper isn't live data. -->
-            <Grid Grid.Row="2" Background="#CC151617" IsVisible="{Binding IsContinuousReadDisabledOverlayVisible}">
-                <Border MaxWidth="460" Margin="20" Padding="24,20"
-                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Background="{StaticResource SurfaceRaisedBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="Continuous read mode disabled" FontSize="15" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Classes="muted" TextWrapping="Wrap" TextAlignment="Center" LineHeight="19"
-                                   Text="Gamehook is paused to save resources. It will only read game memory when responding to API requests." />
-                        <Button Content="Turn on continuous read mode" Classes="action" HorizontalAlignment="Center"
-                                Command="{Binding ToggleContinuousReadCommand}" />
-                    </StackPanel>
-                </Border>
             </Grid>
 
             <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"

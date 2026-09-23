@@ -87,15 +87,40 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private string? connectionWarning;
 
-    // Mirrors GamehookSession.IsContinuousReadEnabled. While false only the live parts of the UI freeze: the
-    // workspace (tree values, hex view, read timings) sits behind an overlay and stops refreshing,
-    // while loading a driver/mapper keeps working.
+    // Mirrors GamehookSession.IsContinuousReadEnabled. While false nothing polls the driver: the
+    // workspace stays usable but shows the values from the last read, and a banner offers "Read"
+    // (ReadNowCommand) - an API ?read=true read updates it too. Writes stay refused (GamehookRouter).
     [ObservableProperty]
     private bool isContinuousReadEnabled;
 
-    public bool IsContinuousReadDisabledOverlayVisible => IsWorkspaceVisible && !IsContinuousReadEnabled;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ReadNowCommand))]
+    private bool isReadingNow;
 
-    partial void OnIsContinuousReadEnabledChanged(bool value) => OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
+    public bool IsReadOnDemandBannerVisible => IsWorkspaceVisible && !IsContinuousReadEnabled;
+
+    partial void OnIsContinuousReadEnabledChanged(bool value) => OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
+
+    private bool CanReadNow() => Mapper is not null && !IsReadingNow;
+
+    // One driver read, plus the hex viewer when it's showing, for continuous read mode off.
+    [RelayCommand(CanExecute = nameof(CanReadNow))]
+    private async Task ReadNowAsync()
+    {
+        IsReadingNow = true;
+        try
+        {
+            await session.ReadOnDemandAsync().ConfigureAwait(true);
+            if (hexViewer.IsActive)
+            {
+                await hexViewer.RefreshAsync(force: true).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            IsReadingNow = false;
+        }
+    }
 
     public ObservableCollection<MapperChoice> Mappers { get; } = [];
     public ObservableCollection<DriverChoice> Drivers { get; } = [];
@@ -397,10 +422,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         DataWarning = session.DataWarning;
         ConnectionWarning = session.ConnectionWarning;
 
-        // Everything below is live data. With continuous read mode off, on-demand API reads still raise
-        // Changed; ignore them - OnContinuousReadChanged catches up once it is back on.
-        if (!IsContinuousReadEnabled) return;
-
+        // With continuous read mode off, Changed only fires for on-demand reads (Read, or an API
+        // ?read=true), so the tree below always shows the latest read either way.
         OnPropertyChanged(nameof(FooterStatusBrush));
         OnFooterMetricsChanged();
 
@@ -422,8 +445,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             leaf.RefreshDisplayValue();
         }
 
-        // Raw memory reads share driver ownership and use their own display cadence.
-        if (hexViewer.IsActive)
+        // Raw memory reads share driver ownership and use their own display cadence. They are driver
+        // reads of their own, so only continuous read mode triggers them from here.
+        if (IsContinuousReadEnabled && hexViewer.IsActive)
         {
             _ = hexViewer.RefreshAsync();
         }
@@ -720,12 +744,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnMapperChanged(IMapper? value)
     {
         ReloadCommand.NotifyCanExecuteChanged();
+        ReadNowCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsLoaded));
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
+        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
         OnFooterMetricsChanged();
@@ -736,7 +761,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
+        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
     }
 
     partial void OnDataWarningChanged(string? value) => OnPropertyChanged(nameof(HasDataWarning));
@@ -755,7 +780,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(IsLoadScreenVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsContinuousReadDisabledOverlayVisible));
+        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
         OnPropertyChanged(nameof(ReadingStatusText));
         OnPropertyChanged(nameof(HasReadingStatus));
         OnFooterMetricsChanged();
