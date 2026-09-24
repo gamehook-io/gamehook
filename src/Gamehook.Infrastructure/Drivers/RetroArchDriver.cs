@@ -35,6 +35,9 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     private readonly CancellationTokenSource disposeCts = new();
     private readonly Task receiveLoopTask;
 
+    // Addresses where RetroArch has truncated a read (a core memory-map descriptor ends there).
+    private readonly ConcurrentDictionary<uint, byte> descriptorBoundaries = new();
+
     public RetroArchDriver(string? sourcePath)
     {
         var (host, port) = NetworkEndpoint.Parse(sourcePath, DefaultPort, "RetroArch");
@@ -108,48 +111,63 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         return new IDriver.Response(DateTimeOffset.UtcNow, segments);
     }
 
-    // Start every fixed-size chunk at once. A core can still truncate a read at a memory-map
-    // descriptor boundary; only the missing tail then needs a dependent continuation request.
+    // RetroArch only services network commands once per emulated frame (from the core's input
+    // poll), so every dependent round-trip costs a whole frame (~16.7ms at 60fps). A core truncates
+    // a read at a memory-map descriptor boundary (e.g. Gambatte's GB WRAM is split at 0xD000), which
+    // used to cost a follow-up request - and a second frame - on every poll. Boundaries learned from
+    // those truncations are remembered, so later reads are split at them up front and every piece
+    // goes out in the same frame. A stale boundary (different core/content) only costs a split.
     private async Task<ReadOnlyMemory<byte>?> ReadCoreMemory(uint address, int length)
     {
         var bytes = new byte[length];
-        var chunks = new List<(int Offset, int Length)>();
-        for (var offset = 0; offset < length; offset += MaximumReadChunkLength)
+        var end = address + (uint)length;
+        var splits = descriptorBoundaries.Keys.Where(boundary => boundary > address && boundary < end);
+        for (var offset = MaximumReadChunkLength; offset < length; offset += MaximumReadChunkLength)
         {
-            chunks.Add((offset, Math.Min(length - offset, MaximumReadChunkLength)));
+            splits = splits.Append(address + (uint)offset);
         }
 
-        var replies = await Task.WhenAll(chunks.Select(chunk =>
-            ReadCoreMemoryChunk(address + (uint)chunk.Offset, chunk.Length))).ConfigureAwait(false);
+        var starts = splits.Distinct().Order().Prepend(address).ToArray();
+        var chunks = starts.Select((start, index) =>
+            (Offset: (int)(start - address), Length: (int)((index + 1 < starts.Length ? starts[index + 1] : end) - start))).ToArray();
 
-        for (var index = 0; index < chunks.Count; index++)
+        var received = await Task.WhenAll(chunks.Select(chunk =>
+            ReadCoreMemoryRange(address + (uint)chunk.Offset, bytes.AsMemory(chunk.Offset, chunk.Length)))).ConfigureAwait(false);
+
+        for (var index = 0; index < chunks.Length; index++)
         {
             var (offset, requestedLength) = chunks[index];
-            var chunk = replies[index];
-            if (chunk is null)
-            {
-                return offset == 0 ? null : throw new InvalidDataException(
-                    $"RetroArch stopped responding with data partway through a read at 0x{address:x} (got {offset} of {length} byte(s)).");
-            }
-
-            chunk.Value.Span.CopyTo(bytes.AsSpan(offset));
-            var receivedLength = chunk.Value.Length;
-            while (receivedLength < requestedLength)
-            {
-                var continuation = await ReadCoreMemoryChunk(
-                    address + (uint)(offset + receivedLength), requestedLength - receivedLength).ConfigureAwait(false);
-                if (continuation is null)
-                {
-                    throw new InvalidDataException(
-                        $"RetroArch stopped responding with data partway through a read at 0x{address:x} (got {offset + receivedLength} of {length} byte(s)).");
-                }
-
-                continuation.Value.Span.CopyTo(bytes.AsSpan(offset + receivedLength));
-                receivedLength += continuation.Value.Length;
-            }
+            if (received[index] == requestedLength) continue;
+            if (offset == 0 && received[index] == 0) return null;
+            throw new InvalidDataException(
+                $"RetroArch stopped responding with data partway through a read at 0x{address:x} (got {offset + received[index]} of {length} byte(s)).");
         }
 
         return bytes;
+    }
+
+    // Fills destination from address, following any descriptor-boundary truncation with a
+    // continuation. Returns how many bytes were filled; short only when RetroArch has no data.
+    private async Task<int> ReadCoreMemoryRange(uint address, Memory<byte> destination)
+    {
+        var receivedLength = 0;
+        while (receivedLength < destination.Length)
+        {
+            var start = address + (uint)receivedLength;
+            if (await ReadCoreMemoryChunk(start, destination.Length - receivedLength).ConfigureAwait(false) is not { } chunk)
+            {
+                return receivedLength;
+            }
+
+            chunk.Span.CopyTo(destination.Span[receivedLength..]);
+            receivedLength += chunk.Length;
+            if (receivedLength < destination.Length)
+            {
+                descriptorBoundaries.TryAdd(address + (uint)receivedLength, 0);
+            }
+        }
+
+        return receivedLength;
     }
 
     private async Task<ReadOnlyMemory<byte>?> ReadCoreMemoryChunk(uint address, int length)
