@@ -41,7 +41,7 @@ public sealed class GamehookApiHostedService(
             document.Info.Description = """
                 ## Instances
 
-                Gamehook can run several instances at once, each with its own driver and mapper (for example Pokemon Red over RetroArch and Pokemon Blue over SuperShuckie); the UI shows each as a tab. `GET /instances` lists them. Instances are numbered 0 through n-1 and every instance-specific route lives under `/instances/{index}`. There is always at least one instance, `0`. `POST /instances` adds one; `DELETE /instances/{index}` removes one and shifts later instances down by one index.
+                Gamehook can run several instances at once, each with its own driver and mapper (for example one game over RetroArch and another over SuperShuckie); the UI shows each as a tab. `GET /instances` lists them. Instances are numbered 0 through n-1 and every instance-specific route lives under `/instances/{index}`. There is always at least one instance, `0`. `POST /instances` adds one; `DELETE /instances/{index}` removes one and shifts later instances down by one index.
 
                 ## Read instance properties
 

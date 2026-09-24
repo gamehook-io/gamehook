@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Linq;
 using System.Text;
 using Gamehook.Domain;
@@ -33,18 +34,26 @@ public sealed class StringProperty : Property
         return Encoding.Latin1.GetString(bytes.Span).TrimEnd('\0');
     }
 
-    // game text isn't ASCII/Latin1 - each byte is a tile index that only the mapper's own character map can translate;
-    // an unmapped byte (e.g. the string terminator) ends the string, matching how these ROMs delimit text.
-    private static string DecodeCharacterMap(ReadOnlySpan<byte> bytes, ReferenceTable characterMap)
+    // game text isn't ASCII/Latin1 - each character is a tile index (one byte, or a 16-bit code on
+    // NDS) that only the mapper's own character map can translate; an unmapped code (e.g. the string
+    // terminator) ends the string, matching how these ROMs delimit text.
+    private string DecodeCharacterMap(ReadOnlySpan<byte> bytes, ReferenceTable characterMap)
     {
-        var builder = new StringBuilder(bytes.Length);
-        foreach (var b in bytes)
+        var width = characterMap.CharacterWidth;
+        var builder = new StringBuilder(bytes.Length / width);
+        for (var offset = 0; offset + width <= bytes.Length; offset += width)
         {
-            if (!characterMap.Values.TryGetValue(b, out var character)) break;
+            if (!characterMap.Values.TryGetValue(ReadCharacter(bytes[offset..], width), out var character)) break;
             builder.Append(character);
         }
         return builder.ToString();
     }
+
+    private ulong ReadCharacter(ReadOnlySpan<byte> bytes, int width) => width == 1
+        ? bytes[0]
+        : IntegerEndianness == Endianness.Little
+            ? BinaryPrimitives.ReadUInt16LittleEndian(bytes)
+            : BinaryPrimitives.ReadUInt16BigEndian(bytes);
 
     protected override ReadOnlyMemory<byte> Encode(object? value, ReadOnlyMemory<byte> currentBytes, IReadOnlyDictionary<string, ReferenceTable> references)
     {
@@ -68,10 +77,11 @@ public sealed class StringProperty : Property
         return bytes;
     }
 
-    // Inverse of DecodeCharacterMap: each character must map back to exactly one tile-index byte.
-    private static byte[] EncodeCharacterMap(string text, ReferenceTable characterMap)
+    // Inverse of DecodeCharacterMap: each character must map back to exactly one character code.
+    private byte[] EncodeCharacterMap(string text, ReferenceTable characterMap)
     {
-        var bytes = new byte[text.Length];
+        var width = characterMap.CharacterWidth;
+        var bytes = new byte[text.Length * width];
         for (var i = 0; i < text.Length; i++)
         {
             var character = text[i].ToString();
@@ -80,8 +90,24 @@ public sealed class StringProperty : Property
             {
                 throw new InvalidDataException($"Character '{character}' has no entry in the character map.");
             }
-            bytes[i] = checked((byte)match.Key);
+            WriteCharacter(bytes.AsSpan(i * width), match.Key, width);
         }
         return bytes;
+    }
+
+    private void WriteCharacter(Span<byte> destination, ulong code, int width)
+    {
+        if (width == 1)
+        {
+            destination[0] = checked((byte)code);
+        }
+        else if (IntegerEndianness == Endianness.Little)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(destination, checked((ushort)code));
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt16BigEndian(destination, checked((ushort)code));
+        }
     }
 }

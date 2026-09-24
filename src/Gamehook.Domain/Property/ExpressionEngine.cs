@@ -26,7 +26,7 @@ public sealed class ExpressionEngine
     // Share identical expressions across properties. Unsupported grammar is compiled once as
     // JavaScript; native expressions never initialize or invoke the scripting engine. The backend
     // is bound into the returned delegate here so read time never has to look it up again - the
-    // read loop applies hundreds of these per frame (pokemon_emerald binds 429).
+    // read loop applies hundreds of these per frame (one large mapper binds 429).
     public Func<double, double> Compile(string expression)
     {
         if (expression.Length > 4096) throw new InvalidDataException("Property expression exceeds 4096 characters.");

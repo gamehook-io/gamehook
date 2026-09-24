@@ -60,7 +60,7 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     private readonly (Property Property, DeferredAddress Address)[] dynamicAddressProperties;
 
     // Distinct script-set variables the deferred addresses read, resolved once per read into
-    // runtimeTokenValues rather than once per property - pokemon_emerald's 1500 deferred addresses
+    // runtimeTokenValues rather than once per property - one large mapper's 1500 deferred addresses
     // between them reference exactly two.
     private readonly string[] runtimeTokenNames;
     private readonly ulong?[] runtimeTokenValues;
@@ -176,8 +176,8 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         foreach (var property in compiledProperties)
         {
             // No address, no container, no static value: the only way this property ever gets a
-            // value is a script calling setValue on it later (e.g. gen1's postprocessor computing
-            // player.team.N.ivs.hp, or player.active_pokemon.* mirrored fields) - registering it
+            // value is a script calling setValue on it later (e.g. a postprocessor computing
+            // derived stats, or mirrored "active" subtree fields) - registering it
             // only if it already has one, before any read has ever run, would mean it never shows
             // up at all.
             var isScriptOnly = property.Address is null && property.MemoryContainer is null && property.StaticValue is null;
@@ -336,9 +336,9 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         """);
 
     // Mirrors every property under destinationPath onto the correspondingly-named property under
-    // sourcePath - used to make player.active_pokemon alias whichever party slot (or battle
+    // sourcePath - used to make an "active" subtree alias whichever table slot (or battle
     // structure) is currently active. Bound as mapper.copy_properties; some mapper scripts (e.g.
-    // pokemon_emerald.js) assign it directly to a local const with no pure-JS fallback, so this
+    // some GBA mapper scripts) assign it directly to a local const with no pure-JS fallback, so this
     // isn't optional the way get/set_property_value's JS-level convenience wrappers are.
     private static IReadOnlyDictionary<string, CopyBinding[]> BuildCopyBindings(IEnumerable<Property> properties)
     {

@@ -22,7 +22,9 @@ public static class DependencyInjection
         services.AddSingleton<Drivers.RetroArchConfigurationService>();
         services.AddGamehookLogging(configuration);
         services.AddSingleton(new DriverRegistration(
-            Drivers.RetroArchDriver.Name, source => new Drivers.RetroArchDriver(source), Drivers.RetroArchDriver.DefaultPort));
+            Drivers.RetroArchDriver.Name,
+            source => new Drivers.RetroArchDriver(source, configuration.GetValue(Drivers.RetroArchDriver.AllowMultiFrameReadsKey, true)),
+            Drivers.RetroArchDriver.DefaultPort));
         services.AddSingleton(new DriverRegistration(
             Drivers.SuperShuckieDriver.Name, source => new Drivers.SuperShuckieDriver(source), Drivers.SuperShuckieDriver.DefaultPort));
         services.AddSingleton(new DriverRegistration(Drivers.SaveStateDriver.Name, source =>

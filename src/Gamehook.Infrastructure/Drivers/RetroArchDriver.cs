@@ -18,13 +18,24 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     public const string Name = "RetroArch";
 
     public const int DefaultPort = 55355;
+    public const string AllowMultiFrameReadsKey = "RetroArch:AllowMultiFrameReads";
     private const int ReceiveTimeoutMilliseconds = 2000;
 
     // An 8KB binary read becomes roughly 24KB of ASCII hex, well below UDP's payload limit.
     private const int MaximumReadChunkLength = 8192;
 
+    // Every chunk is requested at once and RetroArch answers them all in the same frame, so the
+    // replies land together: a GBA mapper's ~13 chunks is ~320KB, well past Linux's 208KB default
+    // socket buffer, and the kernel silently drops whatever overflows (the read then times out).
+    // Ask for room for every reply; the OS may cap it (net.core.rmem_max). Then, if multi-frame reads
+    // are allowed, the number of chunks in flight is limited to what the granted buffer can hold, so
+    // a poll spreads over several frames; if not, a poll that cannot fit fails instead.
+    private const int RequestedReceiveBufferLength = 4 * 1024 * 1024;
+
     private readonly UdpClient client;
     private readonly SemaphoreSlim readGate = new(1, 1);
+    private readonly SemaphoreSlim chunkSlots;
+    private readonly bool allowMultiFrameReads;
     private bool disposed;
 
     // RetroArch echoes the requested address back in its reply, so in-flight requests are
@@ -38,10 +49,20 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     // Addresses where RetroArch has truncated a read (a core memory-map descriptor ends there).
     private readonly ConcurrentDictionary<uint, byte> descriptorBoundaries = new();
 
-    public RetroArchDriver(string? sourcePath)
+    /// <param name="allowMultiFrameReads">
+    /// When false, every chunk of a poll is always requested at once so RetroArch answers them in the
+    /// same frame, and a poll too large for the socket's receive buffer fails rather than being spread
+    /// over several frames (where values from different regions could come from different frames).
+    /// </param>
+    public RetroArchDriver(string? sourcePath, bool allowMultiFrameReads = true)
     {
         var (host, port) = NetworkEndpoint.Parse(sourcePath, DefaultPort, "RetroArch");
+        this.allowMultiFrameReads = allowMultiFrameReads;
         client = new UdpClient();
+        client.Client.ReceiveBufferSize = RequestedReceiveBufferLength;
+        chunkSlots = new SemaphoreSlim(allowMultiFrameReads
+            ? Math.Max(1, client.Client.ReceiveBufferSize / ReplyBufferCost(MaximumReadChunkLength))
+            : int.MaxValue);
         client.Connect(host, port);
         receiveLoopTask = ReceiveLoopAsync();
     }
@@ -81,9 +102,26 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         }
     }
 
+    // Worst-case buffer space one reply takes: 3 ASCII chars per byte, plus kernel bookkeeping, which
+    // Linux charges against the buffer too (it reports double the payload room for that reason).
+    private static int ReplyBufferCost(int length) => 2 * (length * 3 + 64);
+
     private async Task<IDriver.Response> ReadCore(IDriver.Request request)
     {
         var addressable = BusAddress.ResolveReadable(request);
+
+        if (!allowMultiFrameReads)
+        {
+            var required = addressable.Sum(entry => (long)ReplyBufferCost(entry.Segment.Length)
+                + 2L * 64 * (entry.Segment.Length / MaximumReadChunkLength));
+            if (required > client.Client.ReceiveBufferSize)
+            {
+                throw new InvalidOperationException(
+                    $"This mapper's reads need a {required / 1024}KB network receive buffer to arrive in a single frame, " +
+                    $"but the operating system allows only {client.Client.ReceiveBufferSize / 1024}KB. Raise the limit " +
+                    "(on Linux, the net.core.rmem_max sysctl) or set RetroArch:AllowMultiFrameReads to true.");
+            }
+        }
 
         // each region's read (and any boundary-crossing continuation within it) is independent of
         // every other region's, so they run concurrently rather than waiting on each other in turn.
@@ -175,8 +213,10 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         var command = Encoding.ASCII.GetBytes($"READ_CORE_MEMORY {address:x} {length}\n");
         var tcs = new TaskCompletionSource<ReadOnlyMemory<byte>?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        await chunkSlots.WaitAsync().ConfigureAwait(false);
         if (!pendingRequests.TryAdd(address, tcs))
         {
+            chunkSlots.Release();
             throw new InvalidOperationException($"A read for address 0x{address:x} is already in flight.");
         }
 
@@ -195,6 +235,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         finally
         {
             pendingRequests.TryRemove(address, out _);
+            chunkSlots.Release();
         }
     }
 
@@ -348,6 +389,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
             client.Dispose();
             receiveLoopTask.GetAwaiter().GetResult();
             disposeCts.Dispose();
+            chunkSlots.Dispose();
         }
         finally { readGate.Release(); }
     }

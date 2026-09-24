@@ -3,7 +3,7 @@ using Gamehook.Domain.Interface;
 namespace Gamehook.Domain;
 
 /// The set of independent Gamehook instances (one mapper + driver session each) running inside
-/// this process - e.g. Pokemon Red over RetroArch in one and Pokemon Blue over SuperShuckie in
+/// this process - e.g. one game over RetroArch in one and another over SuperShuckie in
 /// another. Instances are addressed purely by position: 0..Count-1, in creation order. Removing
 /// an instance shifts every later instance down by one. There is always at least one instance.
 ///

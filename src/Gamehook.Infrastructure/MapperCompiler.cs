@@ -138,7 +138,7 @@ public sealed class MapperCompiler
                     throw new InvalidDataException($"Macro '{type}' is not defined.");
                 }
                 // An optional name namespaces the macro's properties under it (e.g. six
-                // party_pokemon instances need party.0.*, party.1.*, ... instead of colliding
+                // record macro instances need party.0.*, party.1.*, ... instead of colliding
                 // on the same names) - omit it when the macro is only ever used once in scope.
                 var name = (string?)element.Attribute("name");
                 var childPath = name is null ? path : CombinePath(path, name);
@@ -239,10 +239,10 @@ public sealed class MapperCompiler
         ? new Dictionary<string, ReferenceTable>(StringComparer.Ordinal)
         : parent.Elements().ToDictionary(
             x => x.Name.LocalName,
-            x => new ReferenceTable((string?)x.Attribute("type") == "number", ReadEntries(x)),
+            x => new ReferenceTable((string?)x.Attribute("type") == "number", ReadEntries(x), CharacterWidth(x)),
             StringComparer.Ordinal);
 
-    // A handful of mapper reference tables (e.g. pokemon_emerald.xml's battle_action) declare the
+    // A handful of mapper reference tables (e.g. a battle_action table) declare the
     // same key twice with different values - a pre-existing authoring issue, unrelated to scripting.
     // ToDictionary throws on that; last-entry-wins is the least surprising way to tolerate it.
     private static IReadOnlyDictionary<ulong, string> ReadEntries(XElement table)
@@ -255,6 +255,10 @@ public sealed class MapperCompiler
         }
         return entries;
     }
+
+    // A character map with any code above 0xFF (e.g. a 0xFFFF terminator) holds 16-bit characters.
+    private static int CharacterWidth(XElement table) =>
+        table.Elements("entry").Any(entry => ParseNumber((string)entry.Attribute("key")!) > 0xFF) ? 2 : 1;
 
     private static IReadOnlyDictionary<string, string> MergeVariables(IReadOnlyDictionary<string, string> inherited, XElement element)
     {

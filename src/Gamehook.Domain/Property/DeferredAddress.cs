@@ -5,7 +5,7 @@ using NCalc;
 namespace Gamehook.Domain.Property;
 
 // A "{{token}}" address, reduced at compile time to the cheapest form that still reproduces the
-// expression exactly. The read loop touches thousands of these per frame (pokemon_emerald compiles
+// expression exactly. The read loop touches thousands of these per frame (a large GBA mapper compiles
 // 1500), so nothing here may parse, allocate, or call into a scripting engine at read time.
 //
 // Every compile-time "{name}" is already substituted away before this type sees the expression, so
@@ -49,7 +49,7 @@ public sealed class DeferredAddress
     /// <param name="variables">Compile-time mapper variables.</param>
     /// <param name="internToken">
     /// Maps a runtime token name onto its slot in the mapper-wide token table, so a read resolves
-    /// each distinct token once (pokemon_emerald's 1500 deferred addresses share just two) instead
+    /// each distinct token once (one large mapper's 1500 deferred addresses share just two) instead
     /// of once per property.
     /// </param>
     public static DeferredAddress Compile(
