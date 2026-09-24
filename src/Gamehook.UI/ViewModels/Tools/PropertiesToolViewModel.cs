@@ -11,14 +11,14 @@ public sealed partial class PropertiesToolViewModel : Tool
     private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(150);
     private readonly DispatcherTimer searchTimer;
 
-    public MainWindowViewModel Main { get; }
+    public InstanceViewModel Main { get; }
 
     [ObservableProperty]
     private string searchText = string.Empty;
 
     public bool HasSearchText => !string.IsNullOrWhiteSpace(SearchText);
 
-    public PropertiesToolViewModel(MainWindowViewModel main)
+    public PropertiesToolViewModel(InstanceViewModel main)
     {
         Main = main;
         Id = "Properties";

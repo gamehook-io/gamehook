@@ -9,20 +9,22 @@ namespace Gamehook.RestApi;
 
 public static class DriverEndpoints
 {
-    public static void MapDriverEndpoints(this WebApplication app)
+    public static void MapDriverEndpoints(this RouteGroupBuilder instance)
     {
-        app.MapGet("/driver", (GamehookRouter router, IEnumerable<DriverRegistration> registrations) =>
-            router.DriverName is null
-                ? ApiProblems.NotFound("No driver is selected.", "driver_not_selected")
-                : Results.Ok(CreateDriverResponse(router, registrations)))
+        instance.MapGet("/driver", (int index, GamehookInstances instances, IEnumerable<DriverRegistration> registrations) =>
+            !instances.TryGet(index, out var router) ? ApiProblems.InstanceNotFound(index)
+            : router.DriverName is null ? ApiProblems.NotFound("No driver is selected.", "driver_not_selected")
+            : Results.Ok(CreateDriverResponse(router, registrations)))
             .WithName("GetDriver")
             .WithSummary("Gets the currently selected driver.")
             .Produces<DriverResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithTags("Driver");
 
-        app.MapPost("/driver", async (SetDriverRequest request, GamehookRouter router, IEnumerable<DriverRegistration> registrations, CancellationToken cancellationToken) =>
+        instance.MapPost("/driver", async (int index, SetDriverRequest request, GamehookInstances instances, IEnumerable<DriverRegistration> registrations, CancellationToken cancellationToken) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             if (string.IsNullOrWhiteSpace(request.Value))
                 return ApiProblems.BadRequest("'value' is required.", "driver_name_required");
 
@@ -49,14 +51,17 @@ public static class DriverEndpoints
         })
         .WithName("SetDriver")
         .WithSummary("Changes the driver. If a mapper is already loaded, it is reloaded against the new driver.")
-        .WithDescription("Network drivers (RetroArch, SuperShuckie) connect to localhost on their default port unless 'port' is supplied. 'source' may also give a host or host:port.")
+        .WithDescription("Network drivers (RetroArch, SuperShuckie) connect to localhost on their default port unless 'port' is supplied. 'source' may also give a host or host:port. Returns 422 when another instance is already using the same host:port (or save-state file); no two instances may share one.")
         .Produces<DriverResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .WithTags("Driver");
 
-        app.MapGet("/driver/{region}", async (string region, ulong? address, int? length, GamehookRouter router) =>
+        instance.MapGet("/driver/{region}", async (int index, string region, ulong? address, int? length, GamehookInstances instances) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             var (bytes, error) = await router.ReadDriverRegionAsync(region, address, length).ConfigureAwait(false);
             return bytes is null
                 ? ApiProblems.Unprocessable(error ?? "Memory region could not be read.", "memory_read_failed")
@@ -66,11 +71,14 @@ public static class DriverEndpoints
         .WithSummary("Reads raw bytes from a memory region. Omit address/length to read the whole region (where its size is known).")
         .WithDescription("The response is a base64-encoded JSON byte string. Supply both address and length, or omit both.")
         .Produces<byte[]>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .WithTags("Driver");
 
-        app.MapPost("/driver/{region}", async (string region, WriteDriverRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
+        instance.MapPost("/driver/{region}", async (int index, string region, WriteDriverRequest request, GamehookInstances instances, CancellationToken cancellationToken) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             if (!router.Session.IsContinuousReadEnabled)
                 return ApiProblems.ContinuousReadDisabled("Writing");
 
@@ -93,6 +101,7 @@ public static class DriverEndpoints
         .WithDescription("Returns 409 while continuous read mode is disabled.")
         .Produces<SuccessResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
         .WithTags("Driver");
@@ -101,7 +110,7 @@ public static class DriverEndpoints
     private static DriverRegistration? FindRegistration(IEnumerable<DriverRegistration> registrations, string name) =>
         registrations.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    private static DriverResponse CreateDriverResponse(GamehookRouter router, IEnumerable<DriverRegistration> registrations)
+    internal static DriverResponse CreateDriverResponse(GamehookRouter router, IEnumerable<DriverRegistration> registrations)
     {
         var name = router.DriverName!;
         int? port = null;

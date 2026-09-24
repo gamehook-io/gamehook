@@ -14,6 +14,10 @@ internal static class ApiProblems
 
     public static IResult ServiceUnavailable(string detail, string code) => Create(StatusCodes.Status503ServiceUnavailable, "Service unavailable", detail, code);
 
+    public static IResult InstanceNotFound(int index) => NotFound(
+        $"Instance {index} does not exist. GET /instances lists the available instances.",
+        "instance_not_found");
+
     public static IResult ContinuousReadDisabled(string action) => Conflict(
         $"{action} is unavailable while continuous read mode is disabled. Enable it with POST /settings {{ \"continuousRead\": true }} or Settings > Continuous Read Mode.",
         "continuous_read_disabled");

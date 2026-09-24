@@ -45,7 +45,7 @@ public sealed partial class PropertyTreeNodeViewModel(string name, IProperty? pr
     [ObservableProperty]
     private string rawBytesHex = string.Empty;
 
-    // Watched from the Pinned tab. Only leaves are pinnable; MainWindowViewModel listens
+    // Watched from the Pinned tab. Only leaves are pinnable; InstanceViewModel listens
     // for this to keep its Pinned collection in sync with the tree.
     [ObservableProperty]
     private bool isPinned;

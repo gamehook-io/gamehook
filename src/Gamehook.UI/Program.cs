@@ -83,11 +83,11 @@ if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("ShowConsole",
 builder.Services.AddGamehook(builder.Configuration);
 builder.Services.AddSingleton<MainWindowViewModel>();
 // REST API (Gamehook.RestApi): runs its own Kestrel instance inside this same process/host, sharing
-// the GamehookRouter singleton above with the Avalonia UI - not a separate executable.
+// the GamehookInstances singleton above with the Avalonia UI - not a separate executable.
 builder.Services.AddHostedService<Gamehook.RestApi.GamehookApiHostedService>();
 using var host = builder.Build();
 
-// Applies the configured ContinuousRead setting to the shared session before anything can load a mapper
+// Applies the configured ContinuousRead setting to every instance before anything can load a mapper
 // or start polling (see SettingsService).
 host.Services.GetRequiredService<SettingsService>();
 

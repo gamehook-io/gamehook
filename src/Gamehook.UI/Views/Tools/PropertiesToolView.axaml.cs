@@ -11,7 +11,7 @@ namespace Gamehook.UI.Views.Tools;
 
 public partial class PropertiesToolView : UserControl
 {
-    private MainWindowViewModel? subscribedMain;
+    private InstanceViewModel? subscribedMain;
     public PropertiesToolView()
     {
         InitializeComponent();

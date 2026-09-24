@@ -51,7 +51,7 @@ public partial class App : Application
             Dispatcher.UIThread.UnhandledException += (_, e) =>
             {
                 e.Handled = true;
-                viewModel.Status = $"Error: {e.Exception.Message}";
+                if (viewModel.SelectedInstance is { } instance) instance.Status = $"Error: {e.Exception.Message}";
                 logger.LogError(e.Exception, "Unhandled exception on the UI dispatcher.");
             };
         }

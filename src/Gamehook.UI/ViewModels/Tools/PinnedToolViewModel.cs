@@ -4,9 +4,9 @@ namespace Gamehook.UI.ViewModels.Tools;
 
 public sealed class PinnedToolViewModel : Tool
 {
-    public MainWindowViewModel Main { get; }
+    public InstanceViewModel Main { get; }
 
-    public PinnedToolViewModel(MainWindowViewModel main)
+    public PinnedToolViewModel(InstanceViewModel main)
     {
         Main = main;
         Id = "Pinned";

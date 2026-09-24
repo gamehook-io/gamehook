@@ -9,17 +9,21 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Gamehook.RestApi;
 
-// Pushes property changes over a websocket instead of making clients poll GET /instance/properties. One
+// Pushes property changes over a websocket instead of making clients poll GET /instances/{index}/properties. One
 // JSON array per successful read tick, containing only the properties whose value/bytes changed -
 // same GamehookSession.PropertiesChanged diff the REST API's Kestrel instance already computes.
 public static class WebSocketEndpoints
 {
-    public static void MapPropertyChangesWebSocket(this WebApplication app)
+    public static void MapPropertyChangesWebSocket(this RouteGroupBuilder instance)
     {
-        app.UseWebSockets();
-
-        app.MapGet("/ws", async (HttpContext context, GamehookRouter router, WebSocketConnectionTracker tracker) =>
+        instance.MapGet("/ws", async (int index, HttpContext context, GamehookInstances instances, WebSocketConnectionTracker tracker) =>
         {
+            if (!instances.TryGet(index, out var router))
+            {
+                await ApiProblems.InstanceNotFound(index).ExecuteAsync(context).ConfigureAwait(false);
+                return;
+            }
+
             if (!context.WebSockets.IsWebSocketRequest)
             {
                 await ApiProblems.BadRequest("Connect to this endpoint using a WebSocket upgrade request.", "websocket_upgrade_required")
@@ -40,44 +44,58 @@ public static class WebSocketEndpoints
             tracker.Add(socket);
             using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
             // Separate from lifetime: cancelling a pending ReceiveAsync aborts the socket outright,
-            // so disabling continuous read mode only stops the pump, leaving the socket open to send a proper
-            // close frame below.
+            // so disabling continuous read mode (or removing the instance) only stops the pump,
+            // leaving the socket open to send a proper close frame below.
             using var pumpStop = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            var closeReason = "Continuous read mode disabled.";
             var channel = Channel.CreateUnbounded<IReadOnlyList<PropertyChange>>(
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
-            void OnChanged(IReadOnlyList<PropertyChange> changes) => channel.Writer.TryWrite(changes);
-            void OnContinuousReadChanged(bool enabled)
+            void StopPump(string reason)
             {
-                if (enabled) return;
+                closeReason = reason;
                 try { pumpStop.Cancel(); }
                 catch (ObjectDisposedException) { }
             }
+            void OnChanged(IReadOnlyList<PropertyChange> changes) => channel.Writer.TryWrite(changes);
+            void OnContinuousReadChanged(bool enabled)
+            {
+                if (!enabled) StopPump("Continuous read mode disabled.");
+            }
+            void OnInstanceRemoved(int _, GamehookRouter removed)
+            {
+                if (ReferenceEquals(removed, router)) StopPump("Instance removed.");
+            }
             router.Session.PropertiesChanged += OnChanged;
             router.Session.ContinuousReadChanged += OnContinuousReadChanged;
-            // Continuous read mode may have been disabled between the check above and subscribing.
-            if (!router.Session.IsContinuousReadEnabled) pumpStop.Cancel();
+            instances.InstanceRemoved += OnInstanceRemoved;
+            // Continuous read mode may have been disabled, or the instance removed, between the
+            // checks above and subscribing.
+            if (!router.Session.IsContinuousReadEnabled) StopPump("Continuous read mode disabled.");
+            if (instances.IndexOf(router) < 0) StopPump("Instance removed.");
 
             var receiveTask = DiscardIncomingAsync(socket, lifetime);
             try
             {
                 await PumpChangesAsync(socket, channel.Reader, pumpStop.Token).ConfigureAwait(false);
                 if (!lifetime.IsCancellationRequested)
-                    await CloseForContinuousReadDisabledAsync(socket, receiveTask).ConfigureAwait(false);
+                    await CloseGoingAwayAsync(socket, receiveTask, closeReason).ConfigureAwait(false);
             }
             finally
             {
                 router.Session.PropertiesChanged -= OnChanged;
                 router.Session.ContinuousReadChanged -= OnContinuousReadChanged;
+                instances.InstanceRemoved -= OnInstanceRemoved;
                 lifetime.Cancel();
                 await receiveTask.ConfigureAwait(false);
                 tracker.Remove(socket);
             }
         })
         .WithName("PropertyChangesWebSocket")
-        .WithSummary("Streams mapper property changes over WebSocket.")
-        .WithDescription("Connect with ws://127.0.0.1:<port>/ws. After each successful mapper read, the server sends one UTF-8 JSON text frame containing an array of changed properties. Each item has path (slash-free dotted property path), value (decoded value), and bytes (integer array from 0 through 255). No initial snapshot is sent. A normal HTTP request receives ProblemDetails with status 400. While continuous read mode is disabled, upgrade requests receive 409, and disabling it closes open connections with status 1001 (going away).")
+        .WithSummary("Streams the instance's mapper property changes over WebSocket.")
+        .WithDescription("Connect with ws://127.0.0.1:<port>/instances/{index}/ws. After each successful mapper read, the server sends one UTF-8 JSON text frame containing an array of changed properties. Each item has path (slash-free dotted property path), value (decoded value), and bytes (integer array from 0 through 255). No initial snapshot is sent. A normal HTTP request receives ProblemDetails with status 400, or 404 for an unknown instance. While continuous read mode is disabled, upgrade requests receive 409. Disabling continuous read mode or removing the instance closes open connections with status 1001 (going away).")
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .WithTags("WebSocket");
     }
@@ -108,12 +126,12 @@ public static class WebSocketEndpoints
 
     // Sends the close frame and gives the client a moment to answer it (DiscardIncomingAsync ends
     // on the reply) before the caller tears the connection down.
-    private static async Task CloseForContinuousReadDisabledAsync(WebSocket socket, Task receiveTask)
+    private static async Task CloseGoingAwayAsync(WebSocket socket, Task receiveTask, string reason)
     {
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, "Continuous read mode disabled.", timeout.Token).ConfigureAwait(false);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, reason, timeout.Token).ConfigureAwait(false);
             await receiveTask.WaitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

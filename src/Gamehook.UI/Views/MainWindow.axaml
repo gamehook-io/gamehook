@@ -4,7 +4,7 @@
              xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
              xmlns:dock="using:Dock.Avalonia.Controls"
              xmlns:dockmodel="using:Dock.Model.Core"
-        xmlns:controls="using:Gamehook.UI.Controls"
+        xmlns:views="using:Gamehook.UI.Views"
         x:Class="Gamehook.UI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding WindowTitle}"
@@ -14,6 +14,11 @@
         WindowDecorations="None"
         Background="{StaticResource AppBackgroundBrush}"
         FontFamily="Consolas,DejaVu Sans Mono,monospace" FontSize="12">
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+T" Command="{Binding AddInstanceCommand}" />
+        <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseInstanceCommand}" CommandParameter="{Binding SelectedInstance}" />
+    </Window.KeyBindings>
 
     <Window.Resources>
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#151617" />
@@ -221,6 +226,54 @@
         <Style Selector="Border.pinned-row:pointerover">
             <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
         </Style>
+        <Style Selector="ListBox.instance-tabs">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem">
+            <Setter Property="Padding" Value="12,0,6,0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="Foreground" Value="#AAB0B8" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+        </Style>
+        <Style Selector="Button.tab-close, Button.tab-add">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.tab-close">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+        </Style>
+        <Style Selector="Button.tab-add">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="Button.tab-close:pointerover, Button.tab-add:pointerover">
+            <Setter Property="Background" Value="#33363B" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.tab-close:disabled">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Button.tab-close Path, Button.tab-add Path">
+            <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}" />
+            <Setter Property="StrokeThickness" Value="1.2" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
         <Style Selector="ToolTip">
             <Setter Property="Background" Value="#25282D" />
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
@@ -230,7 +283,7 @@
     </Window.Styles>
 
     <Border BorderBrush="#4A4D52" BorderThickness="1">
-        <Grid RowDefinitions="28,35,*">
+        <Grid RowDefinitions="28,35,Auto,*">
             <Border Grid.Row="0" Background="{StaticResource TitleBrush}"
                     BorderBrush="#303236" BorderThickness="0,0,0,1"
                     PointerPressed="TitleBar_PointerPressed">
@@ -259,9 +312,12 @@
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="3,0">
                     <Menu Grid.Column="0" VerticalAlignment="Center">
                         <MenuItem Header="File">
-                            <MenuItem Header="Load" Command="{Binding ShowLoadScreenCommand}" />
+                            <MenuItem Header="New Instance" Command="{Binding AddInstanceCommand}" InputGesture="Ctrl+T" />
+                            <MenuItem Header="Close Instance" Command="{Binding CloseInstanceCommand}" CommandParameter="{Binding SelectedInstance}" InputGesture="Ctrl+W" />
+                            <Separator />
+                            <MenuItem Header="Load" Command="{Binding SelectedInstance.ShowLoadScreenCommand, FallbackValue={x:Null}}" />
                             <MenuItem Header="Load Mapper…" Click="LoadMapperMenuItem_Click" />
-                            <MenuItem Header="Reload" Command="{Binding ReloadCommand}" />
+                            <MenuItem Header="Reload" Command="{Binding SelectedInstance.ReloadCommand, FallbackValue={x:Null}}" />
                             <Separator />
                             <MenuItem Header="Exit" Click="ExitMenuItem_Click" />
                         </MenuItem>
@@ -279,8 +335,10 @@
                         </MenuItem>
                     </Menu>
 
+                    <!-- Read status for the selected tab. -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                Margin="0,0,4,0" IsVisible="{Binding HasReadingStatus}">
+                                Margin="0,0,4,0" DataContext="{Binding SelectedInstance}" x:DataType="vm:InstanceViewModel"
+                                IsVisible="{Binding HasReadingStatus, FallbackValue=False}">
                         <ToolTip.Tip>
                             <Border Padding="10,8" MinWidth="230">
                                 <StackPanel Spacing="7">
@@ -318,159 +376,78 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="2" IsVisible="{Binding IsLoadScreenVisible}">
-                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="640" Margin="20" Spacing="20" HorizontalAlignment="Stretch"
-                                VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                            <Image Source="/icon.png" Width="64" Height="64" />
-                            <TextBlock Text="Gamehook" FontSize="18" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Text="Gamehook is a debugging tool for reading and modifying emulator memory."
-                                   Classes="muted" FontSize="12" LineHeight="19" TextWrapping="Wrap"
-                                   HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,20" />
+            <!-- One tab per instance. With more than one, each shows its index - the {index} in
+                 /instances/{index} API routes - after the title, e.g. "Dragon Warrior (0)". -->
+            <Border Grid.Row="2" Background="{StaticResource SurfaceMutedBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,Auto,*">
+                    <ListBox Grid.Column="0" Classes="instance-tabs" ItemsSource="{Binding Instances}"
+                             SelectedItem="{Binding SelectedInstance}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:InstanceViewModel">
+                                <StackPanel Orientation="Horizontal" Spacing="7" ToolTip.Tip="{Binding Status}">
+                                    <TextBlock Text="●" FontSize="8" VerticalAlignment="Center"
+                                               Foreground="{Binding FooterStatusBrush}" IsVisible="{Binding IsConnected}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding TabTitle}" MaxWidth="220" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Index, StringFormat='({0})'}" Classes="muted"
+                                                   VerticalAlignment="Center" IsVisible="{Binding ShowIndex}" />
+                                    </StackPanel>
+                                    <Button Classes="tab-close" ToolTip.Tip="Close instance"
+                                            Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).CloseInstanceCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Path Data="M0,0 L8,8 M8,0 L0,8" />
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Grid.Column="1" Classes="tab-add" Command="{Binding AddInstanceCommand}"
+                            ToolTip.Tip="New instance (Ctrl+T)">
+                        <Path Data="M5,0 V10 M0,5 H10" />
+                    </Button>
+                </Grid>
+            </Border>
 
-                        <!-- Port sits beside the driver; its Auto column collapses for drivers without one. -->
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                            <StackPanel Grid.Column="0" Spacing="7">
-                                <TextBlock Text="DRIVER" Classes="eyebrow" />
-                                <ComboBox HorizontalAlignment="Stretch"
-                                          ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
-                                          PlaceholderText="Select a driver...">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:DriverChoice">
-                                            <TextBlock Text="{Binding DisplayName}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Text="Where Gamehook reads memory from." Classes="muted" FontSize="11" />
-                            </StackPanel>
+            <ItemsControl Grid.Row="3" ItemsSource="{Binding Instances}">
+                <!-- Every tab's view stays alive (tree expansion, scroll, dock layout); only the
+                     selected one is visible. -->
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Grid />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:InstanceViewModel">
+                        <views:InstanceView IsVisible="{Binding IsSelected}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-                            <StackPanel Grid.Column="1" Spacing="7" Width="140" IsVisible="{Binding IsNetworkDriver}">
-                                <TextBlock Text="PORT" Classes="eyebrow" />
-                                <NumericUpDown Value="{Binding DriverPort, Mode=TwoWay}" HorizontalAlignment="Stretch"
-                                               Minimum="1" Maximum="65535" Increment="1" FormatString="0"
-                                               PlaceholderText="{Binding SelectedDriver.DefaultPort, FallbackValue={x:Null}}"
-                                               Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}" />
-                                <TextBlock Text="{Binding DriverPortHint}" Classes="muted" FontSize="11" />
-                            </StackPanel>
-                        </Grid>
-
-                        <StackPanel Spacing="7" IsVisible="{Binding IsSaveStateDriver}">
-                            <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBox Grid.Column="0" Text="{Binding SelectedSaveStatePath}"
-                                         PlaceholderText="No file selected" IsReadOnly="True"
-                                         Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                         Padding="8,6" />
-                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
-                                        Click="BrowseSaveStateButton_Click" />
-                            </Grid>
-                            <TextBlock Text="Select a save-state file from your computer." Classes="muted" FontSize="11" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="7">
-                            <TextBlock Text="MAPPER" Classes="eyebrow" />
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
-                                          ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
-                                          PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}"
-                                          HorizontalContentAlignment="Stretch">
-                                    <!-- Stretch items so the user-mapper badge can right-align in the dropdown too. -->
-                                    <ComboBox.Styles>
-                                        <Style Selector="ComboBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                        </Style>
-                                    </ComboBox.Styles>
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:MapperChoice">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <Border Grid.Column="1" IsVisible="{Binding IsCustom}" Background="#3A2F1A" BorderBrush="#E0A339"
-                                                        BorderThickness="1" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
-                                                    <TextBlock Text="USER MAPPER" FontSize="9" FontWeight="SemiBold" Foreground="#E0A339" />
-                                                </Border>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
-                                        IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
-                            </Grid>
-                            <TextBlock Text="Maps game memory to human-readable properties." Classes="muted" FontSize="11" />
-                        </StackPanel>
-
-                        <Grid ColumnDefinitions="*,Auto">
-                            <SelectableTextBlock Grid.Column="0" Text="{Binding Status}" Classes="error"
-                                                  VerticalAlignment="Center" TextWrapping="Wrap"
-                                                  IsVisible="{Binding HasError}" />
-                            <Button Grid.Column="1" Content="Load" Command="{Binding LoadCommand}"
-                                    Classes="action" Width="110" />
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
-
-            <Grid Grid.Row="2" IsVisible="{Binding IsConnecting}">
-                <controls:LoadingOverlay Text="Connecting…" />
-            </Grid>
-
-            <Grid Grid.Row="2" Margin="6,6,6,5" RowDefinitions="Auto,*"
-                  IsVisible="{Binding IsWorkspaceVisible}">
-                <!-- Continuous read mode off: the workspace stays usable with the last-read values. -->
-                <Border Grid.Row="0" Margin="0,0,0,6" Padding="10,6" Background="{StaticResource SurfaceRaisedBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        IsVisible="{Binding IsReadOnDemandBannerVisible}">
-                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="muted" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
-                                   Text="Continuous read mode is off. Values show the last read and won't update on their own." />
-                        <Button Grid.Column="1" Content="Turn on continuous read" Classes="secondary" MinHeight="26" Padding="12,3"
-                                Command="{Binding ToggleContinuousReadCommand}" />
-                        <Button Grid.Column="2" Content="Read" Classes="action" MinHeight="26" Padding="16,3"
-                                ToolTip.Tip="Read the driver once and update every value."
-                                Command="{Binding ReadNowCommand}" />
-                    </Grid>
-                </Border>
-
-                <DockControl Grid.Row="1" Layout="{Binding Layout}" IsDockingEnabled="False" />
-
-                <StackPanel Grid.Row="1" VerticalAlignment="Top">
-                    <Border Padding="10,7" Background="{StaticResource WarningSoftBrush}"
-                            BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
-                            IsVisible="{Binding HasDataWarning}">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0" Text="⚠" Foreground="{StaticResource WarningBrush}"
-                                       VerticalAlignment="Center" FontSize="13" />
-                            <TextBlock Grid.Column="1" Text="{Binding DataWarning}" Foreground="{StaticResource WarningBrush}"
-                                       VerticalAlignment="Center" TextWrapping="Wrap" FontSize="11" />
-                            <Button Grid.Column="2" Content="✕" Classes="chrome" VerticalAlignment="Center"
-                                    Command="{Binding DismissDataWarningCommand}" />
-                        </Grid>
-                    </Border>
-
-                </StackPanel>
-            </Grid>
-
-            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
+            <Border Grid.RowSpan="4" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeWest_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
+            <Border Grid.RowSpan="4" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeEast_PointerPressed" />
-            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
+            <Border Grid.RowSpan="4" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeNorth_PointerPressed" />
-            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
+            <Border Grid.RowSpan="4" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeSouth_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
+            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
                     Cursor="TopLeftCorner"
                     Background="Transparent" PointerPressed="ResizeNorthWest_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Cursor="TopRightCorner"
                     Background="Transparent" PointerPressed="ResizeNorthEast_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     Cursor="BottomLeftCorner"
                     Background="Transparent" PointerPressed="ResizeSouthWest_PointerPressed" />
-            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Cursor="BottomRightCorner"
                     Background="Transparent" PointerPressed="ResizeSouthEast_PointerPressed" />
         </Grid>

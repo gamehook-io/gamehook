@@ -42,13 +42,22 @@ public static class DependencyInjection
             }));
         services.TryAddSingleton<IDriverFactory, DriverFactory>();
         services.TryAddSingleton<IMapperFactory, MapperFactory>();
-        // Singleton, not transient: the REST API (Gamehook.RestApi) and the Avalonia UI must observe
-        // the same loaded mapper/driver, not each get their own independent session.
-        services.TryAddSingleton<GamehookSession>();
-        services.TryAddSingleton<GamehookRouter>();
+        // Singleton: the REST API (Gamehook.RestApi) and the Avalonia UI must observe the same set of
+        // instances. Each instance gets its own GamehookSession (own mapper, driver, poll loop).
+        // No two instances may share a driver endpoint; DriverResources says what each driver uses.
+        services.TryAddSingleton(provider =>
+        {
+            var registrations = provider.GetServices<DriverRegistration>().ToArray();
+            return new GamehookInstances(
+                () => new GamehookSession(
+                    provider.GetRequiredService<IMapperFactory>(),
+                    provider.GetRequiredService<IDriverFactory>(),
+                    provider.GetService<ILogger<GamehookSession>>()),
+                (driverName, sourcePath) => DriverResources.Identify(registrations, driverName, sourcePath));
+        });
         services.TryAddSingleton<ApiBindStatus>();
         services.TryAddSingleton(provider => SettingsService.Create(
-            provider.GetRequiredService<GamehookSession>(),
+            provider.GetRequiredService<GamehookInstances>(),
             configuration,
             provider.GetService<ILogger<SettingsService>>()));
 

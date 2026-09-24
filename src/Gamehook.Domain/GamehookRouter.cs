@@ -8,9 +8,12 @@ namespace Gamehook.Domain;
 /// and any other host (Avalonia UI included) call the same code instead of each re-deriving it.
 public sealed class GamehookRouter
 {
-    public GamehookRouter(GamehookSession session)
+    private readonly IDriverReservations? reservations;
+
+    public GamehookRouter(GamehookSession session, IDriverReservations? reservations = null)
     {
         Session = session;
+        this.reservations = reservations;
     }
 
     public GamehookSession Session { get; }
@@ -21,6 +24,9 @@ public sealed class GamehookRouter
 
     public string? DriverName { get; private set; }
     public string? DriverSourcePath { get; private set; }
+
+    /// Path of the mapper last loaded successfully; null after a failed load or Unload.
+    public string? MapperPath => mapperPath;
     private string? mapperPath;
 
     public IMapper? Mapper => Session.Mapper;
@@ -29,14 +35,32 @@ public sealed class GamehookRouter
     /// POST /driver reload-in-place) funnels through this. Remembers the driver/mapper it was
     /// given so a later single-argument call (SetDriverAsync, LoadMapperAsync) can reuse them.
     /// Starts polling on success regardless of host; the session holds off the loop itself while
-    /// continuous read mode is disabled.
+    /// continuous read mode is disabled. Refuses, leaving the current load untouched, when another
+    /// instance is already using the same driver endpoint.
     public async Task<(bool Success, string? Error)> LoadAsync(string mapperPath, string driverName, string? driverSourcePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(driverName);
 
-        var success = await Session.LoadAsync(mapperPath, driverName, driverSourcePath, cancellationToken).ConfigureAwait(false);
+        var alreadyHeld = false;
+        if (reservations?.TryReserve(this, driverName, driverSourcePath, out alreadyHeld) is { } conflict)
+            return (false, conflict);
+
+        // A failed first connection gives the endpoint back; a failed reload (e.g. the emulator was
+        // closed) keeps it, so another instance can't take it while this one retries.
+        bool success;
+        try
+        {
+            success = await Session.LoadAsync(mapperPath, driverName, driverSourcePath, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (!alreadyHeld) reservations?.Release(this);
+            throw;
+        }
+
         if (success) Session.StartPolling(PollingInterval);
+        else if (!alreadyHeld) reservations?.Release(this);
         DriverName = driverName;
         DriverSourcePath = driverSourcePath;
         this.mapperPath = success ? mapperPath : null;
@@ -51,6 +75,8 @@ public sealed class GamehookRouter
         ArgumentException.ThrowIfNullOrWhiteSpace(driverName);
         if (mapperPath is null)
         {
+            if (FindDriverConflict(driverName, sourcePath) is { } conflict)
+                return Task.FromResult<(bool, string?)>((false, conflict));
             DriverName = driverName;
             DriverSourcePath = sourcePath;
             return Task.FromResult<(bool, string?)>((true, null));
@@ -58,6 +84,10 @@ public sealed class GamehookRouter
 
         return LoadAsync(mapperPath, driverName, sourcePath, cancellationToken);
     }
+
+    /// Error message when another instance is already using this driver endpoint, else null.
+    public string? FindDriverConflict(string driverName, string? sourcePath) =>
+        reservations?.FindConflict(this, driverName, sourcePath);
 
     public Task<(bool Success, string? Error)> LoadMapperAsync(string mapperPath, CancellationToken cancellationToken = default)
     {
@@ -67,9 +97,10 @@ public sealed class GamehookRouter
             : LoadAsync(mapperPath, DriverName, DriverSourcePath, cancellationToken);
     }
 
-    /// Unloads the active mapper. Keeps the selected driver (mirrors the UI: going back to the
-    /// load screen doesn't clear the driver dropdown) but forgets the mapper path, so a later
-    /// SetDriverAsync no longer tries to reload a mapper that is no longer active.
+    /// Unloads the active mapper. Keeps the selected driver - and its endpoint reservation - so the
+    /// UI can load another mapper on the same driver without another instance taking it meanwhile,
+    /// but forgets the mapper path, so a later SetDriverAsync no longer tries to reload a mapper
+    /// that is no longer active.
     public void Unload()
     {
         Session.Unload();

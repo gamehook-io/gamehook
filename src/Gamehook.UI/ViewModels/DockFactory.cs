@@ -10,7 +10,7 @@ namespace Gamehook.UI.ViewModels;
 
 public sealed class DockFactory : Factory
 {
-    private readonly MainWindowViewModel main;
+    private readonly InstanceViewModel main;
     private readonly PropertiesToolViewModel properties;
     private readonly WorkspaceToolViewModel workspace;
     private readonly HexViewerToolViewModel hexViewer;
@@ -20,7 +20,7 @@ public sealed class DockFactory : Factory
     public event Action<PropertyToolViewModel>? PropertyInspectorReplaced;
 
     public DockFactory(
-        MainWindowViewModel main,
+        InstanceViewModel main,
         PropertiesToolViewModel properties,
         WorkspaceToolViewModel workspace,
         HexViewerToolViewModel hexViewer,

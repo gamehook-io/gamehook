@@ -9,7 +9,7 @@ namespace Gamehook.UI.ViewModels.Tools;
 
 public sealed partial class PropertyToolViewModel : Tool, IDisposable
 {
-    public MainWindowViewModel Main { get; }
+    public InstanceViewModel Main { get; }
     private PropertyTreeNodeViewModel? suppressedSelection;
     private IReadOnlyList<SelectionParseViewModel>? suppressedSelectionParses;
     private bool isFrozen;
@@ -187,7 +187,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
 
     // A replacement inspector starts blank even though the property that was floated remains
     // selected globally. Its next selection behaves like a normal docked inspector.
-    public PropertyToolViewModel(MainWindowViewModel main, bool suppressCurrentSelection = false)
+    public PropertyToolViewModel(InstanceViewModel main, bool suppressCurrentSelection = false)
     {
         Main = main;
         suppressedSelection = suppressCurrentSelection ? main.SelectedNode : null;
@@ -265,8 +265,8 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
 
     private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (isFrozen || e.PropertyName is not (nameof(MainWindowViewModel.SelectedNode) or
-            nameof(MainWindowViewModel.SelectionParses) or nameof(MainWindowViewModel.SelectionAddressRange)))
+        if (isFrozen || e.PropertyName is not (nameof(InstanceViewModel.SelectedNode) or
+            nameof(InstanceViewModel.SelectionParses) or nameof(InstanceViewModel.SelectionAddressRange)))
         {
             return;
         }

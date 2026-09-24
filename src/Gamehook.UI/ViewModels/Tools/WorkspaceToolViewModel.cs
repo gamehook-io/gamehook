@@ -4,9 +4,9 @@ namespace Gamehook.UI.ViewModels.Tools;
 
 public sealed class WorkspaceToolViewModel : Document
 {
-    public MainWindowViewModel Main { get; }
+    public InstanceViewModel Main { get; }
 
-    public WorkspaceToolViewModel(MainWindowViewModel main)
+    public WorkspaceToolViewModel(InstanceViewModel main)
     {
         Main = main;
         Id = "Workspace";

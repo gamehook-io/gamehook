@@ -7,7 +7,15 @@ namespace Gamehook.RestApi;
 public sealed record GamehookInfoResponse(
     [property: Description("Gamehook application version.")] string Version);
 
-/// <summary>Metadata for the currently loaded mapper.</summary>
+/// <summary>One Gamehook instance: an independent driver + mapper session.</summary>
+public sealed record InstanceResponse(
+    [property: Description("Instance index, used in /instances/{index} routes. Indexes are positions: removing an instance shifts later instances down by one.")] int Index,
+    [property: Description("Human-readable session status, for example the last read time or an error.")] string Status,
+    [property: Description("True when a mapper is loaded and the last read did not fail.")] bool Connected,
+    [property: Description("Selected driver, or null when none is selected.")] DriverResponse? Driver,
+    [property: Description("Loaded mapper, or null when none is loaded.")] LoadedMapperResponse? Mapper);
+
+/// <summary>Metadata for an instance's loaded mapper.</summary>
 public sealed record LoadedMapperResponse(
     [property: Description("Mapper identifier from its definition.")] string? Id,
     [property: Description("Display name of the game.")] string Name,
@@ -15,14 +23,15 @@ public sealed record LoadedMapperResponse(
     [property: Description("Native processor identifier, when used.")] string? NativeProcessor,
     [property: Description("True when the mapper is not an official one (user-mappers folder, MapperDirectory, or elsewhere on disk).")] bool Custom);
 
-/// <summary>An available mapper that can be loaded with POST /mapper.</summary>
+/// <summary>An available mapper that can be loaded with POST /instances/{index}/mapper.</summary>
 public sealed record AvailableMapperResponse(
-    [property: Description("Value to pass to POST /mapper.")] string Value,
+    [property: Description("Value to pass to POST /instances/{index}/mapper.")] string Value,
     string? Id,
     string Name,
     string? Platform,
     [property: Description("True for custom mappers (user-mappers folder or MapperDirectory) rather than the official set.")] bool Custom,
-    bool Loaded);
+    [property: Description("True when any instance has this mapper loaded.")] bool Loaded,
+    [property: Description("Indexes of the instances that have this mapper loaded.")] int[] Instances);
 
 /// <summary>Full value and metadata for one mapper property.</summary>
 public sealed record PropertyResponse(

@@ -13,7 +13,7 @@ public sealed class HexViewerToolViewModel : Document
     // land within a poll or two, so showing it immediately would just flicker on every region switch.
     private static readonly TimeSpan LoadingSpinnerDelay = TimeSpan.FromSeconds(1);
 
-    public MainWindowViewModel Main { get; }
+    public InstanceViewModel Main { get; }
     public ReadOnlyMemory<byte> Bytes { get; private set; }
     public ulong StartingAddress { get; private set; }
     public ulong AddressBase { get; private set; }
@@ -24,7 +24,7 @@ public sealed class HexViewerToolViewModel : Document
     private string? displayedRegion;
     private readonly DispatcherTimer loadingSpinnerTimer;
 
-    public HexViewerToolViewModel(MainWindowViewModel main)
+    public HexViewerToolViewModel(InstanceViewModel main)
     {
         Main = main;
         Id = "HexViewer";

@@ -13,10 +13,11 @@ using Scalar.AspNetCore;
 namespace Gamehook.RestApi;
 
 /// Runs the REST API's own Kestrel instance inside the app's existing process/host, sharing the
-/// same GamehookRouter (and so the same GamehookSession/Mapper/Driver state) the Avalonia UI
-/// uses - one instance, two ways in, no duplicated load/read/write logic.
+/// same GamehookInstances (and so the same per-instance session/mapper/driver state) the Avalonia
+/// UI uses - one set of instances, two ways in, no duplicated load/read/write logic.
 public sealed class GamehookApiHostedService(
-    GamehookRouter router,
+    GamehookInstances instances,
+    IEnumerable<DriverRegistration> driverRegistrations,
     FilesystemProvider filesystemProvider,
     IConfiguration configuration,
     ILoggerFactory loggerFactory,
@@ -30,7 +31,8 @@ public sealed class GamehookApiHostedService(
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(loggerFactory);
-        builder.Services.AddSingleton(router);
+        builder.Services.AddSingleton(instances);
+        foreach (var registration in driverRegistrations) builder.Services.AddSingleton(registration);
         builder.Services.AddSingleton(filesystemProvider);
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
@@ -38,17 +40,21 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Description = """
+                ## Instances
+
+                Gamehook can run several instances at once, each with its own driver and mapper (for example Pokemon Red over RetroArch and Pokemon Blue over SuperShuckie); the UI shows each as a tab. `GET /instances` lists them. Instances are numbered 0 through n-1 and every instance-specific route lives under `/instances/{index}`. There is always at least one instance, `0`. `POST /instances` adds one; `DELETE /instances/{index}` removes one and shifts later instances down by one index.
+
                 ## Read instance properties
 
-                Call `GET /instance/properties` once to get a full snapshot of the loaded mapper's properties. The response is a nested JSON object; dots in mapper property paths become nested objects.
+                Call `GET /instances/{index}/properties` once to get a full snapshot of the instance's loaded mapper's properties. The response is a nested JSON object; dots in mapper property paths become nested objects.
 
-                Then connect to `ws://127.0.0.1:<port>/ws` to receive updates. Each successful mapper read sends an array containing only changed properties, with each item's dotted `path`, decoded `value`, and raw `bytes`. The WebSocket sends no initial snapshot. Apply updates to the snapshot by `path`; after reconnecting, call `GET /instance/properties` again.
+                Then connect to `ws://127.0.0.1:<port>/instances/{index}/ws` to receive updates. Each successful mapper read sends an array containing only changed properties, with each item's dotted `path`, decoded `value`, and raw `bytes`. The WebSocket sends no initial snapshot. Apply updates to the snapshot by `path`; after reconnecting, call `GET /instances/{index}/properties` again.
 
                 A mapper must be loaded before the snapshot or updates are available.
 
                 ## Continuous read mode
 
-                Continuous read mode is on by default. `POST /settings` with `{ "continuousRead": false }` switches to a low-power mode for the current session: the continuous driver read loop stops, `/ws` connections are closed and refused, and writes are refused. `GET /instance/properties` (and single-property GETs) then return the values from the last read; add `?read=true` to read the driver first and get values as of that request.
+                Continuous read mode is on by default and applies to every instance. `POST /settings` with `{ "continuousRead": false }` switches to a low-power mode for the current session: the continuous driver read loops stop, WebSocket connections are closed and refused, and writes are refused. `GET /instances/{index}/properties` (and single-property GETs) then return the values from the last read; add `?read=true` to read the driver first and get values as of that request.
                 """;
             return Task.CompletedTask;
         }));
@@ -64,12 +70,11 @@ public sealed class GamehookApiHostedService(
         {
             options.DefaultOpenAllTags = true;
         });
+        app.UseWebSockets();
         app.MapMapperEndpoints();
-        app.MapPropertiesEndpoints();
-        app.MapDriverEndpoints();
+        app.MapInstanceEndpoints();
         app.MapHealthEndpoint();
         app.MapSettingsEndpoints();
-        app.MapPropertyChangesWebSocket();
 
         // A bind failure (almost always another Gamehook instance already holding the port) must
         // not take the whole app down with it - the mapper/driver session works fine with no API,

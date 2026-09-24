@@ -13,7 +13,7 @@ public partial class HexViewerToolView : UserControl
     // new selection - but never the side that was actually clicked, since the user is already
     // looking at it and a re-center there would just yank the view out from under their click.
     private bool suppressAutoScroll;
-    private MainWindowViewModel? subscribedMain;
+    private InstanceViewModel? subscribedMain;
 
     public HexViewerToolView()
     {
@@ -92,7 +92,7 @@ public partial class HexViewerToolView : UserControl
 
     // Tree selection can switch SelectedRegionId too, so the hex view needs a layout pass
     // (region rebuild) before its bytes have a Y position to scroll to.
-    private void ScrollToSelectedProperty(MainWindowViewModel viewModel)
+    private void ScrollToSelectedProperty(InstanceViewModel viewModel)
     {
         if (viewModel.SelectedNode?.Property is not { } property)
         {

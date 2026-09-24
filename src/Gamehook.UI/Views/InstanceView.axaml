@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.UI.ViewModels"
+             xmlns:controls="using:Gamehook.UI.Controls"
+             x:Class="Gamehook.UI.Views.InstanceView"
+             x:DataType="vm:InstanceViewModel">
+    <!-- One instance tab: load screen, connecting spinner, or the docked workspace. Styles and
+         brushes come from MainWindow. -->
+    <Grid>
+        <Grid IsVisible="{Binding IsLoadScreenVisible}">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="640" Margin="20" Spacing="20" HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                        <Image Source="/icon.png" Width="64" Height="64" />
+                        <TextBlock Text="Gamehook" FontSize="18" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="Gamehook is a debugging tool for reading and modifying emulator memory."
+                               Classes="muted" FontSize="12" LineHeight="19" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,20" />
+
+                    <!-- Port sits beside the driver; its Auto column collapses for drivers without one. -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Grid.Column="0" Spacing="7">
+                            <TextBlock Text="DRIVER" Classes="eyebrow" />
+                            <ComboBox HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}"
+                                      PlaceholderText="Select a driver...">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DriverChoice">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="Where Gamehook reads memory from." Classes="muted" FontSize="11" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="7" Width="140" IsVisible="{Binding IsNetworkDriver}">
+                            <TextBlock Text="PORT" Classes="eyebrow" />
+                            <NumericUpDown Value="{Binding DriverPort, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                                           Minimum="1" Maximum="65535" Increment="1" FormatString="0"
+                                           PlaceholderText="{Binding SelectedDriver.DefaultPort, FallbackValue={x:Null}}"
+                                           Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}" />
+                            <TextBlock Text="{Binding DriverPortHint}" Classes="muted" FontSize="11" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Spacing="7" IsVisible="{Binding IsSaveStateDriver}">
+                        <TextBlock Text="SAVE STATE FILE" Classes="eyebrow" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0" Text="{Binding SelectedSaveStatePath}"
+                                     PlaceholderText="No file selected" IsReadOnly="True"
+                                     Background="{StaticResource FieldBrush}" BorderBrush="{StaticResource BorderBrush}"
+                                     Padding="8,6" />
+                            <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                    Click="BrowseSaveStateButton_Click" />
+                        </Grid>
+                        <TextBlock Text="Select a save-state file from your computer." Classes="muted" FontSize="11" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="MAPPER" Classes="eyebrow" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Mappers}" SelectedItem="{Binding SelectedMapper}"
+                                      PlaceholderText="Select mapper definition..." IsEnabled="{Binding CanSelectMapper}"
+                                      HorizontalContentAlignment="Stretch">
+                                <!-- Stretch items so the user-mapper badge can right-align in the dropdown too. -->
+                                <ComboBox.Styles>
+                                    <Style Selector="ComboBoxItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ComboBox.Styles>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:MapperChoice">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <Border Grid.Column="1" IsVisible="{Binding IsCustom}" Background="#3A2F1A" BorderBrush="#E0A339"
+                                                    BorderThickness="1" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
+                                                <TextBlock Text="USER MAPPER" FontSize="9" FontWeight="SemiBold" Foreground="#E0A339" />
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Browse…" Classes="secondary" Width="92"
+                                    IsEnabled="{Binding CanSelectMapper}" Click="BrowseMapperButton_Click" />
+                        </Grid>
+                        <TextBlock Text="Maps game memory to human-readable properties." Classes="muted" FontSize="11" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <SelectableTextBlock Grid.Column="0" Text="{Binding Status}" Classes="error"
+                                              VerticalAlignment="Center" TextWrapping="Wrap"
+                                              IsVisible="{Binding HasError}" />
+                        <Button Grid.Column="1" Content="Load" Command="{Binding LoadCommand}"
+                                Classes="action" Width="110" />
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <Grid IsVisible="{Binding IsConnecting}">
+            <controls:LoadingOverlay Text="Connecting…" />
+        </Grid>
+
+        <Grid Margin="6,6,6,5" RowDefinitions="Auto,*"
+              IsVisible="{Binding IsWorkspaceVisible}">
+            <!-- Continuous read mode off: the workspace stays usable with the last-read values. -->
+            <Border Grid.Row="0" Margin="0,0,0,6" Padding="10,6" Background="{StaticResource SurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    IsVisible="{Binding IsReadOnDemandBannerVisible}">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="muted" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Text="Continuous read mode is off. Values show the last read and won't update on their own." />
+                    <Button Grid.Column="1" Content="Turn on continuous read" Classes="secondary" MinHeight="26" Padding="12,3"
+                            Command="{Binding ToggleContinuousReadCommand}" />
+                    <Button Grid.Column="2" Content="Read" Classes="action" MinHeight="26" Padding="16,3"
+                            ToolTip.Tip="Read the driver once and update every value."
+                            Command="{Binding ReadNowCommand}" />
+                </Grid>
+            </Border>
+
+            <DockControl Grid.Row="1" Layout="{Binding Layout}" IsDockingEnabled="False" />
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Top">
+                <Border Padding="10,7" Background="{StaticResource WarningSoftBrush}"
+                        BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                        IsVisible="{Binding HasDataWarning}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="⚠" Foreground="{StaticResource WarningBrush}"
+                                   VerticalAlignment="Center" FontSize="13" />
+                        <TextBlock Grid.Column="1" Text="{Binding DataWarning}" Foreground="{StaticResource WarningBrush}"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" FontSize="11" />
+                        <Button Grid.Column="2" Content="✕" Classes="chrome" VerticalAlignment="Center"
+                                Command="{Binding DismissDataWarningCommand}" />
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

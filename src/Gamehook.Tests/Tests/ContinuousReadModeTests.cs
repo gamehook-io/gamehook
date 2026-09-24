@@ -104,10 +104,11 @@ public sealed class ContinuousReadModeTests
                 .Build();
 
             var mapper = new CountingMapper();
-            using var session = new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
-            var router = new GamehookRouter(session);
-            var settings = new SettingsService(session, initialContinuousRead: true);
-            var api = new GamehookApiHostedService(router, new FilesystemProvider(configuration, directory.FullName, officialMappersEnabled: true), configuration,
+            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory()));
+            Assert.That(instances.TryGet(0, out var router), Is.True);
+            var session = router.Session;
+            var settings = new SettingsService(instances, initialContinuousRead: true);
+            var api = new GamehookApiHostedService(instances, [], new FilesystemProvider(configuration, directory.FullName, officialMappersEnabled: true), configuration,
                 NullLoggerFactory.Instance, new ApiBindStatus(), settings);
             await api.StartAsync(CancellationToken.None);
             try
@@ -124,12 +125,12 @@ public sealed class ContinuousReadModeTests
                 // Waits out any poll read still in flight (it shares the read gate) before counting.
                 await session.ReadOnDemandAsync();
                 var readsWhileOn = mapper.Reads;
-                var ignoredRead = await http.GetAsync("/instance/properties?read=true");
+                var ignoredRead = await http.GetAsync("/instances/0/properties?read=true");
                 Assert.That(ignoredRead.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                 Assert.That(mapper.Reads, Is.EqualTo(readsWhileOn), "?read=true is ignored while continuous read mode is on");
 
                 using var socket = new ClientWebSocket();
-                await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws"), CancellationToken.None);
+                await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/instances/0/ws"), CancellationToken.None);
 
                 var disabled = await http.PostAsJsonAsync("/settings/", new { continuousRead = false });
                 Assert.That(disabled.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -144,20 +145,20 @@ public sealed class ContinuousReadModeTests
 
                 using var refused = new ClientWebSocket();
                 Assert.ThrowsAsync<WebSocketException>(() =>
-                    refused.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws"), CancellationToken.None));
+                    refused.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/instances/0/ws"), CancellationToken.None));
 
                 var readsBefore = mapper.Reads;
-                var properties = await http.GetAsync("/instance/properties");
+                var properties = await http.GetAsync("/instances/0/properties");
                 Assert.That(properties.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                 Assert.That(mapper.Reads, Is.EqualTo(readsBefore), "a plain GET returns last-read values without reading");
 
-                var readProperties = await http.GetAsync("/instance/properties?read=true");
+                var readProperties = await http.GetAsync("/instances/0/properties?read=true");
                 Assert.That(readProperties.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                 Assert.That(mapper.Reads, Is.EqualTo(readsBefore + 1), "?read=true reads the driver first");
 
-                var write = await http.PostAsJsonAsync("/instance/properties/anything", new { value = 1 });
+                var write = await http.PostAsJsonAsync("/instances/0/properties/anything", new { value = 1 });
                 Assert.That(write.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
-                var rawWrite = await http.PostAsJsonAsync("/driver/RAM", new { address = 0, data = new[] { 1 } });
+                var rawWrite = await http.PostAsJsonAsync("/instances/0/driver/RAM", new { address = 0, data = new[] { 1 } });
                 Assert.That(rawWrite.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
 
                 var enabled = await http.PostAsJsonAsync("/settings", new { continuousRead = true });
@@ -165,6 +166,79 @@ public sealed class ContinuousReadModeTests
                 Assert.That(session.IsContinuousReadEnabled, Is.True);
                 Assert.That(Directory.EnumerateFileSystemEntries(directory.FullName), Is.Empty,
                     "settings changes are session-only; nothing is written to the profile");
+            }
+            finally
+            {
+                await api.StopAsync(CancellationToken.None);
+            }
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Instances_are_independent_and_addressed_by_index()
+    {
+        var directory = Directory.CreateTempSubdirectory("gamehook-instances-");
+        try
+        {
+            var port = GetFreePort();
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Port"] = port.ToString() })
+                .Build();
+
+            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(new CountingMapper()), new StubDriverFactory()));
+            var settings = new SettingsService(instances, initialContinuousRead: true);
+            var api = new GamehookApiHostedService(instances, [], new FilesystemProvider(configuration, directory.FullName, officialMappersEnabled: true), configuration,
+                NullLoggerFactory.Instance, new ApiBindStatus(), settings);
+            await api.StartAsync(CancellationToken.None);
+            try
+            {
+                using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+                Assert.That((await http.GetFromJsonAsync<JsonArray>("/instances"))!.Count, Is.EqualTo(1));
+
+                var created = await http.PostAsync("/instances", null);
+                Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+                Assert.That((int)(await created.Content.ReadFromJsonAsync<JsonObject>())!["index"]!, Is.EqualTo(1));
+                Assert.That(created.Headers.Location?.ToString(), Is.EqualTo("/instances/1"));
+
+                Assert.That(instances.TryGet(1, out var second), Is.True);
+                Assert.That((await second.LoadAsync("stub.xml", "stub", null)).Success, Is.True);
+
+                var listed = (await http.GetFromJsonAsync<JsonArray>("/instances"))!;
+                Assert.That(listed.Count, Is.EqualTo(2));
+                Assert.That((bool)listed[0]!["connected"]!, Is.False, "loading instance 1 leaves instance 0 alone");
+                Assert.That((bool)listed[1]!["connected"]!, Is.True);
+
+                Assert.That((await http.GetAsync("/instances/1/properties")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                var unloaded = await http.GetAsync("/instances/0/properties");
+                Assert.That(unloaded.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+                Assert.That((string)(await unloaded.Content.ReadFromJsonAsync<JsonObject>())!["code"]!, Is.EqualTo("mapper_not_loaded"));
+                var missing = await http.GetAsync("/instances/5/properties");
+                Assert.That(missing.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+                Assert.That((string)(await missing.Content.ReadFromJsonAsync<JsonObject>())!["code"]!, Is.EqualTo("instance_not_found"));
+
+                // Removing an instance closes its WebSocket and shifts later indexes down.
+                using var socket = new ClientWebSocket();
+                await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/instances/1/ws"), CancellationToken.None);
+                Assert.That((await http.DeleteAsync("/instances/1")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                using var receiveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var frame = await socket.ReceiveAsync(new byte[256], receiveTimeout.Token);
+                Assert.That(frame.MessageType, Is.EqualTo(WebSocketMessageType.Close));
+                Assert.That(second.Mapper, Is.Null, "a removed instance is unloaded");
+
+                Assert.That((await http.GetFromJsonAsync<JsonArray>("/instances"))!.Count, Is.EqualTo(1));
+                Assert.That((await http.GetAsync("/instances/1")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+                Assert.That((await http.DeleteAsync("/instances/0")).StatusCode, Is.EqualTo(HttpStatusCode.Conflict),
+                    "the last instance cannot be removed");
+
+                // Continuous read mode is global: it reaches instances added after the change.
+                await http.PostAsJsonAsync("/settings", new { continuousRead = false });
+                await http.PostAsync("/instances", null);
+                Assert.That(instances.TryGet(1, out var third), Is.True);
+                Assert.That(third.Session.IsContinuousReadEnabled, Is.False);
             }
             finally
             {
@@ -193,23 +267,23 @@ public sealed class ContinuousReadModeTests
         }
     }
 
-    private sealed class StubMapperFactory(IMapper mapper) : IMapperFactory
+    internal sealed class StubMapperFactory(IMapper mapper) : IMapperFactory
     {
         public IMapper Create(string mapperPath, string driverName, string? driverSourcePath = null) => mapper;
     }
 
-    private sealed class StubDriverFactory : IDriverFactory
+    internal sealed class StubDriverFactory : IDriverFactory
     {
         public IDriver Create(string name, string? sourcePath = null) => new StubDriver();
     }
 
-    private sealed class StubDriver : IDriver
+    internal sealed class StubDriver : IDriver
     {
         public Task<IDriver.Response> Read(IDriver.Request request) =>
             Task.FromResult(new IDriver.Response(DateTimeOffset.UtcNow, []));
     }
 
-    private sealed class CountingMapper : IMapper
+    internal sealed class CountingMapper : IMapper
     {
         private int reads;
         private int writes;

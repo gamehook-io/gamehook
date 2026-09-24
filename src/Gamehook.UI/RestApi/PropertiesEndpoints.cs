@@ -8,13 +8,16 @@ namespace Gamehook.RestApi;
 
 public static class PropertiesEndpoints
 {
-    public static void MapPropertiesEndpoints(this WebApplication app)
+    public static void MapPropertiesEndpoints(this RouteGroupBuilder instance)
     {
-        app.MapGet("/instance/properties", async (
+        instance.MapGet("/properties", async (
+            int index,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("With continuous read mode off, read the driver before answering. Ignored while continuous read mode is on.")] bool? read,
-            GamehookRouter router,
+            GamehookInstances instances,
             CancellationToken cancellationToken) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             if (read is true && await ReadNowAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
                 return readProblem;
             if (router.Properties is not { } properties)
@@ -24,20 +27,23 @@ public static class PropertiesEndpoints
         })
         .WithName("GetInstanceProperties")
         .WithSummary("Reads every property's value as a nested JSON object.")
-        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if no mapper is loaded. Values come from the last driver read - continuously refreshed while continuous read mode is on, otherwise as of the last on-demand read. With continuous read mode off, ?read=true reads the driver first (503 if that read fails); it is ignored while continuous read mode is on.")
+        .WithDescription("Object keys follow mapper property paths, with dots represented as nested objects. Values use mapper-defined JSON types. Returns 404 if the instance does not exist or has no mapper loaded. Values come from the last driver read - continuously refreshed while continuous read mode is on, otherwise as of the last on-demand read. With continuous read mode off, ?read=true reads the driver first (503 if that read fails); it is ignored while continuous read mode is on.")
         .Produces<Dictionary<string, object?>>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
         .WithTags("Instance");
 
-        app.MapGet("/instance/properties/{*path}", async (
+        instance.MapGet("/properties/{*path}", async (
+            int index,
             string path,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the decoded property value.")] string? value,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("Return only the property bytes as integer array.")] string? bytes,
             [Microsoft.AspNetCore.Mvc.FromQuery, System.ComponentModel.Description("With continuous read mode off, read the driver before answering. Ignored while continuous read mode is on.")] bool? read,
-            GamehookRouter router,
+            GamehookInstances instances,
             CancellationToken cancellationToken) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             if (read is true && await ReadNowAsync(router, cancellationToken).ConfigureAwait(false) is { } readProblem)
                 return readProblem;
 
@@ -60,8 +66,10 @@ public static class PropertiesEndpoints
         .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
         .WithTags("Instance");
 
-        app.MapPost("/instance/properties/{*path}", async (string path, WritePropertyRequest request, GamehookRouter router, CancellationToken cancellationToken) =>
+        instance.MapPost("/properties/{*path}", async (int index, string path, WritePropertyRequest request, GamehookInstances instances, CancellationToken cancellationToken) =>
         {
+            if (!instances.TryGet(index, out var router))
+                return ApiProblems.InstanceNotFound(index);
             if (!router.Session.IsContinuousReadEnabled)
                 return ApiProblems.ContinuousReadDisabled("Writing");
 
