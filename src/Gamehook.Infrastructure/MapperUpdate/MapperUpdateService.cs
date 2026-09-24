@@ -41,7 +41,6 @@ public sealed class MapperUpdateService(
     IConfiguration configuration,
     FilesystemProvider filesystemProvider,
     IHttpClientFactory httpClientFactory,
-    MapperUpdateStatusProvider statusProvider,
     ILogger<MapperUpdateService> logger) : IHostedService
 {
     public const string HttpClientName = "MapperUpdate";
@@ -113,7 +112,6 @@ public sealed class MapperUpdateService(
             if (previousManifest is { } existing && string.Equals(existing.CommitSha, resolved.CommitSha, StringComparison.Ordinal))
             {
                 logger.LogInformation("Mappers in {MapperDirectory} are up to date.", mapperDirectory);
-                statusProvider.SetUpToDate(source, resolved.Reference, resolved.CommitSha);
                 return;
             }
 
@@ -126,12 +124,10 @@ public sealed class MapperUpdateService(
             logger.LogInformation(
                 "Mappers in {MapperDirectory} updated to {Reference} ({CommitSha}).",
                 mapperDirectory, resolved.Reference, resolved.CommitSha);
-            statusProvider.SetUpdated(source, resolved.Reference, resolved.CommitSha, previousManifest?.CommitSha);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Mapper update check failed.");
-            statusProvider.SetFailed(source, ex.Message);
         }
     }
 

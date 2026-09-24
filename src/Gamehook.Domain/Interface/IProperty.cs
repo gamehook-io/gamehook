@@ -21,6 +21,10 @@ public interface IProperty
     /// Memory region (WRAM/VRAM/SRAM/...) derived from Address; null for constants or unsupported addresses.
     string? Region { get; }
 
+    /// Backed by a fixed device address (not a constant, script value, or virtual container), so
+    /// its value and raw bytes can be written.
+    bool IsWritable => Region is not null;
+
     /// Space-separated uppercase hex of the last-read Bytes, e.g. "3F 02 A1"; empty until a value has been read.
     string RawBytesHex { get; }
 

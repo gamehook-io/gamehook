@@ -1,5 +1,6 @@
-using System.Xml.Linq;
+using System.Text.Json.Serialization;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Mapping;
 
 namespace Gamehook.Infrastructure;
 
@@ -12,24 +13,17 @@ public static class MapperValidation
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
 
-        var fullPath = Path.GetFullPath(mapperPath);
-        var document = XDocument.Load(fullPath, LoadOptions.None);
-        var root = document.Root ?? throw new InvalidDataException("Mapper has no root element.");
-        if (root.Name.LocalName != "mapper")
-        {
-            throw new InvalidDataException("Mapper root element must be 'mapper'.");
-        }
-
-        using var mapper = new Mapper(fullPath, ValidationDriver.Instance);
+        var definition = MapperCompiler.Load(mapperPath);
+        using var mapper = new Mapper(definition, ValidationDriver.Instance);
         return new MapperMetadata(
-            fullPath,
-            (string?)root.Attribute("id"),
+            mapper.MapperPath,
+            mapper.Id,
             mapper.GameName,
             mapper.System.Id,
             mapper.NativeProcessorId,
             mapper.Properties.Count,
             mapper.References.Count,
-            File.Exists(Path.ChangeExtension(fullPath, ".js")));
+            definition.ScriptSource is not null);
     }
 
     private sealed class ValidationDriver : IDriver
@@ -49,4 +43,9 @@ public sealed record MapperMetadata(
     string? NativeProcessor,
     int PropertyCount,
     int ReferenceTableCount,
-    bool HasScript);
+    bool HasScript)
+{
+    // Serialized first so `--validate-mapper` output reads { "valid": true, ... }.
+    [JsonPropertyOrder(-1)]
+    public bool Valid => true;
+}

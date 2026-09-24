@@ -68,23 +68,10 @@ public sealed class RetroArchDriver : IDriver, IDisposable
     private async Task WriteCore(IDriver.WriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.System);
-        ArgumentNullException.ThrowIfNull(request.Segments);
-
         foreach (var segment in request.Segments)
         {
             if (segment.Bytes.Length == 0) continue;
-
-            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == segment.RegionId)?.BusAddress is not { } baseAddress)
-            {
-                throw new NotSupportedException($"No known base address for region '{segment.RegionId}' on {request.System.Id}.");
-            }
-
-            if (segment.StartingAddress > uint.MaxValue - baseAddress
-                || (ulong)segment.Bytes.Length > (ulong)uint.MaxValue - baseAddress - segment.StartingAddress + 1)
-                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
-
-            var address = baseAddress + (uint)segment.StartingAddress;
+            var address = BusAddress.Require(request.System, segment);
             var command = Encoding.ASCII.GetBytes(
                 $"WRITE_CORE_MEMORY {address:x} {string.Join(' ', segment.Bytes.ToArray().Select(b => b.ToString("x2")))}\n");
             await client.SendAsync(command, command.Length).ConfigureAwait(false);
@@ -93,31 +80,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
 
     private async Task<IDriver.Response> ReadCore(IDriver.Request request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.System);
-        ArgumentNullException.ThrowIfNull(request.Segments);
-
-        var addressable = new List<(IDriver.MemorySegmentRequest Segment, uint Address)>(request.Segments.Count);
-        foreach (var requestSegment in request.Segments)
-        {
-            if (requestSegment.Length < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(request), requestSegment.Length, "Segment length cannot be negative.");
-            }
-
-            // regions the driver can't address at all (no known base address for this system) are
-            // simply left out of the response - Property.Refresh reports those as a null value
-            // rather than failing the whole read.
-            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == requestSegment.RegionId)?.BusAddress is not { } baseAddress)
-            {
-                continue;
-            }
-
-            if (requestSegment.StartingAddress > uint.MaxValue - baseAddress
-                || (ulong)requestSegment.Length > (ulong)uint.MaxValue - baseAddress - requestSegment.StartingAddress + 1)
-                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
-            addressable.Add((requestSegment, baseAddress + (uint)requestSegment.StartingAddress));
-        }
+        var addressable = BusAddress.ResolveReadable(request);
 
         // each region's read (and any boundary-crossing continuation within it) is independent of
         // every other region's, so they run concurrently rather than waiting on each other in turn.
@@ -209,7 +172,7 @@ public sealed class RetroArchDriver : IDriver, IDisposable
         }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
-            throw new TimeoutException($"RetroArch did not respond to READ_CORE_MEMORY for address 0x{address:x}.", ex);
+            throw new TimeoutException($"RetroArch did not respond to READ_CORE_MEMORY for address 0x{address:x}. Is RetroArch running with Network Commands enabled?", ex);
         }
         finally
         {

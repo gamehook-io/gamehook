@@ -3,7 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Gamehook.Domain;
-using Gamehook.Domain.Models;
+using Gamehook.RestApi;
 using Gamehook.Infrastructure.AppUpdate;
 using Gamehook.UI.ViewModels;
 using Gamehook.UI.Views;

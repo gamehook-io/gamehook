@@ -9,9 +9,27 @@ namespace Gamehook.Infrastructure;
 /// port would talk to the same emulator. File drivers (Save State) are keyed by the file.
 public static class DriverResources
 {
+    public static DriverRegistration? Find(IEnumerable<DriverRegistration> registrations, string driverName) =>
+        registrations.FirstOrDefault(r => string.Equals(r.Name, driverName, StringComparison.OrdinalIgnoreCase));
+
+    /// The port a network driver connects to for this source; null for other drivers, or a source
+    /// that doesn't parse (a failed load keeps its source, and the load already reported why).
+    public static int? GetPort(IEnumerable<DriverRegistration> registrations, string driverName, string? sourcePath)
+    {
+        if (Find(registrations, driverName) is not { DefaultPort: { } defaultPort }) return null;
+        try
+        {
+            return NetworkEndpoint.Parse(sourcePath, defaultPort, driverName).Port;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
     public static DriverResource? Identify(IEnumerable<DriverRegistration> registrations, string driverName, string? sourcePath)
     {
-        var registration = registrations.FirstOrDefault(r => string.Equals(r.Name, driverName, StringComparison.OrdinalIgnoreCase));
+        var registration = Find(registrations, driverName);
 
         if (registration?.DefaultPort is { } defaultPort)
         {

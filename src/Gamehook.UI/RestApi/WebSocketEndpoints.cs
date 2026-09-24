@@ -113,13 +113,7 @@ public static class WebSocketEndpoints
                 }
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (WebSocketException)
-        {
-        }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (IsConnectionEnd(ex))
         {
         }
     }
@@ -134,13 +128,7 @@ public static class WebSocketEndpoints
             await socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, reason, timeout.Token).ConfigureAwait(false);
             await receiveTask.WaitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (WebSocketException)
-        {
-        }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (IsConnectionEnd(ex))
         {
         }
     }
@@ -159,13 +147,7 @@ public static class WebSocketEndpoints
                 if (result.MessageType == WebSocketMessageType.Close) break;
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (WebSocketException)
-        {
-        }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (IsConnectionEnd(ex))
         {
         }
         finally
@@ -173,6 +155,10 @@ public static class WebSocketEndpoints
             lifetime.Cancel();
         }
     }
+
+    // Cancellation, a dropped client, or a socket torn down by shutdown: the connection is simply over.
+    private static bool IsConnectionEnd(Exception ex) =>
+        ex is OperationCanceledException or WebSocketException or ObjectDisposedException;
 
     private static object ToJson(PropertyChange change) => new
     {

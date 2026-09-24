@@ -1,11 +1,10 @@
-using Gamehook.Domain.Interface;
-using Gamehook.Domain;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Dock.Model.Mvvm.Controls;
 
 namespace Gamehook.UI.ViewModels.Tools;
 
-public sealed class HexViewerToolViewModel : Document
+public sealed partial class HexViewerToolViewModel : Document
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(250);
 
@@ -14,11 +13,12 @@ public sealed class HexViewerToolViewModel : Document
     private static readonly TimeSpan LoadingSpinnerDelay = TimeSpan.FromSeconds(1);
 
     public InstanceViewModel Main { get; }
-    public ReadOnlyMemory<byte> Bytes { get; private set; }
-    public ulong StartingAddress { get; private set; }
-    public ulong AddressBase { get; private set; }
-    public int RefreshToken { get; private set; }
-    public bool ShowLoadingSpinner { get; private set; }
+    [ObservableProperty] private ReadOnlyMemory<byte> bytes;
+    [ObservableProperty] private ulong startingAddress;
+    [ObservableProperty] private ulong addressBase;
+    // Bumped on every refresh so the hex view re-renders even when the bytes compare equal.
+    [ObservableProperty] private int refreshToken;
+    [ObservableProperty] private bool showLoadingSpinner;
     private Task? pendingRead;
     private DateTimeOffset lastReadStarted;
     private string? displayedRegion;
@@ -34,7 +34,6 @@ public sealed class HexViewerToolViewModel : Document
         {
             loadingSpinnerTimer.Stop();
             ShowLoadingSpinner = true;
-            OnPropertyChanged(nameof(ShowLoadingSpinner));
         };
     }
 
@@ -55,71 +54,34 @@ public sealed class HexViewerToolViewModel : Document
         return pendingRead;
     }
 
-    public static IReadOnlyList<string> GetRegions(IMapper? mapper) => mapper is null
-        ? []
-        : mapper.System.RegionDefinitions
-            .Where(region => region.Length is > 0)
-            .Select(region => region.Id)
-            .Concat(mapper.VirtualMemoryRegions.Select(region => $"virtual:{region.Id}"))
-            .OrderBy(id => id, StringComparer.Ordinal)
-            .ToArray();
-
     private async Task RefreshCoreAsync()
     {
-        var system = Main.HexSystem;
         var mapper = Main.Mapper;
-        var driver = Main.HexDriver;
         var regionId = Main.SelectedRegionId;
-        IDriver.MemorySegmentSnapshot? snapshot;
+        if (mapper is null || regionId is null) return;
+
+        ReadOnlyMemory<byte>? bytes;
         try
         {
-            if (system is null || mapper is null || regionId is null)
-            {
-                return;
-            }
-            var virtualRegion = mapper.VirtualMemoryRegions.FirstOrDefault(region => $"virtual:{region.Id}" == regionId);
-            if (virtualRegion is not null)
-            {
-                snapshot = new IDriver.MemorySegmentSnapshot(regionId, 0, virtualRegion.Bytes);
-            }
-            else
-            {
-                if (driver is null || system.RegionDefinitions.FirstOrDefault(region => region.Id == regionId)?.Length is not { } length) return;
-                var response = await driver.Read(new IDriver.Request(system, [new IDriver.MemorySegmentRequest(regionId, 0, length)]))
-                    .ConfigureAwait(false);
-                snapshot = response.Segments.SingleOrDefault();
-            }
+            (bytes, _) = await Main.Router.ReadRegionAsync(regionId).ConfigureAwait(false);
         }
         catch (Exception)
         {
             return;
         }
 
-        if (snapshot is null)
-        {
-            return;
-        }
+        if (bytes is not { } regionBytes) return;
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (!ReferenceEquals(driver, Main.HexDriver) || !ReferenceEquals(system, Main.HexSystem)
-                || regionId != Main.SelectedRegionId) return;
+            if (!ReferenceEquals(mapper, Main.Mapper) || regionId != Main.SelectedRegionId) return;
             loadingSpinnerTimer.Stop();
-            if (ShowLoadingSpinner)
-            {
-                ShowLoadingSpinner = false;
-                OnPropertyChanged(nameof(ShowLoadingSpinner));
-            }
-            Bytes = snapshot.Bytes;
-            StartingAddress = snapshot.StartingAddress;
-            AddressBase = (system.RegionDefinitions.FirstOrDefault(region => region.Id == regionId)?.BusAddress ?? 0)
-                + snapshot.StartingAddress;
+            ShowLoadingSpinner = false;
+            Bytes = regionBytes;
+            StartingAddress = 0;
+            AddressBase = mapper.System.FindRegion(regionId)?.BusAddress ?? 0;
             RefreshToken++;
-            OnPropertyChanged(nameof(Bytes));
-            OnPropertyChanged(nameof(StartingAddress));
-            OnPropertyChanged(nameof(AddressBase));
-            OnPropertyChanged(nameof(RefreshToken));
-            Main.RefreshSelectedBytes(regionId, snapshot.StartingAddress, snapshot.Bytes);
+            Main.RefreshSelectedBytes(regionId, 0, regionBytes);
             if (displayedRegion != regionId)
             {
                 displayedRegion = regionId;
@@ -135,17 +97,9 @@ public sealed class HexViewerToolViewModel : Document
         StartingAddress = 0;
         AddressBase = 0;
         RefreshToken++;
-        OnPropertyChanged(nameof(Bytes));
-        OnPropertyChanged(nameof(StartingAddress));
-        OnPropertyChanged(nameof(AddressBase));
-        OnPropertyChanged(nameof(RefreshToken));
 
         loadingSpinnerTimer.Stop();
-        if (ShowLoadingSpinner)
-        {
-            ShowLoadingSpinner = false;
-            OnPropertyChanged(nameof(ShowLoadingSpinner));
-        }
+        ShowLoadingSpinner = false;
         loadingSpinnerTimer.Start();
     }
 }

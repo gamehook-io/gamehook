@@ -27,17 +27,7 @@ internal static class MapperValidationCommand
 
         try
         {
-            var metadata = MapperValidation.Validate(args[1]);
-            WriteJson(new MapperValidationOutput(
-                true,
-                metadata.Path,
-                metadata.Id,
-                metadata.Name,
-                metadata.Platform,
-                metadata.NativeProcessor,
-                metadata.PropertyCount,
-                metadata.ReferenceTableCount,
-                metadata.HasScript));
+            Console.WriteLine(JsonSerializer.Serialize(MapperValidation.Validate(args[1]), JsonOptions));
             return 0;
         }
         catch (Exception ex)
@@ -47,20 +37,6 @@ internal static class MapperValidationCommand
         }
     }
 
-    private static void WriteJson(MapperValidationOutput output) =>
-        Console.WriteLine(JsonSerializer.Serialize(output, JsonOptions));
-
     private static void WriteProblem(string detail) =>
         Console.WriteLine(JsonSerializer.Serialize(new { valid = false, detail }, JsonOptions));
-
-    private sealed record MapperValidationOutput(
-        bool Valid,
-        string? Path = null,
-        string? Id = null,
-        string? Name = null,
-        string? Platform = null,
-        string? NativeProcessor = null,
-        int? PropertyCount = null,
-        int? ReferenceTableCount = null,
-        bool? HasScript = null);
 }

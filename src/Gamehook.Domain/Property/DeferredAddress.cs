@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using NCalc;
 
-namespace Gamehook.Infrastructure;
+namespace Gamehook.Domain.Property;
 
 // A "{{token}}" address, reduced at compile time to the cheapest form that still reproduces the
 // expression exactly. The read loop touches thousands of these per frame (pokemon_emerald compiles
@@ -11,7 +11,7 @@ namespace Gamehook.Infrastructure;
 // Every compile-time "{name}" is already substituted away before this type sees the expression, so
 // the only thing left that can change between reads is the runtime tokens - and those are resolved
 // once per read by the caller, into the shared values span this type indexes into.
-internal sealed class DeferredAddress
+public sealed class DeferredAddress
 {
     // Affine form: value = tokenValue * multiplier + offset. Real mappers are overwhelmingly
     // "{{dma_a}} + 0x1234", so this covers essentially every deferred address in the shipped

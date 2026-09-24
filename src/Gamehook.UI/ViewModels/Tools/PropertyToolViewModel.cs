@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
 using Gamehook.UI.ViewModels;
 
@@ -66,7 +67,7 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
 
     public bool IsStaticValue => ActiveNode?.Property?.StaticValue is not null;
 
-    private bool CanWriteValue => ActiveNode?.Property is { Address: not null, MemoryContainer: null };
+    private bool CanWriteValue => ActiveNode?.Property?.IsWritable == true;
     public bool HasRawBytes => RawByteEdits.Count > 0;
     public bool CanEditRawBytes => CanWriteValue;
     public bool HasPendingRawBytesEdit => CanEditRawBytes && RawBytesFingerprint() != lastSubmittedRawBytesFingerprint;
@@ -117,7 +118,8 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
     private string RawBytesFingerprint() => string.Concat(RawByteEdits.Select(cell => cell.Text.Trim().ToUpperInvariant()));
 
     // Edits are deliberately staged. Device memory changes only when user explicitly presses Save.
-    public async Task SubmitEditAsync()
+    [RelayCommand]
+    private async Task SubmitEditAsync()
     {
         if (ActiveNode?.Property is not { } property || Main.Mapper is null) return;
         var (value, fingerprint) = GetEditedValue(property.Type);
@@ -137,23 +139,20 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         }
     }
 
-    public void CancelEdit()
+    [RelayCommand]
+    private void CancelEdit()
     {
         LoadEditorValues();
         EditError = null;
     }
 
     // Bypasses property decoding entirely - writes exactly the typed bytes to the property's own
-    // address, the same raw poke the hex editor uses. Still refreshes the property's decoded Value
-    // from those bytes afterward, so the VALUE section above doesn't go stale until the next poll.
-    public async Task SubmitRawBytesEditAsync()
+    // address, the same raw poke the hex editor uses. The mapper refreshes the decoded Value from
+    // them (Mapper.WriteRawBytesAsync), so the VALUE section above doesn't go stale until the next poll.
+    [RelayCommand]
+    private async Task SubmitRawBytesEditAsync()
     {
-        if (ActiveNode?.Property is not { } property || Main.Mapper is not { } mapper) return;
-        if (property.BuildRequest() is not { } request)
-        {
-            RawBytesEditError = "This property is not backed by device memory and cannot be written.";
-            return;
-        }
+        if (ActiveNode?.Property is not { } property || Main.Mapper is null) return;
 
         var bytes = new byte[RawByteEdits.Count];
         for (var i = 0; i < RawByteEdits.Count; i++)
@@ -169,17 +168,17 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         var fingerprint = RawBytesFingerprint();
         if (fingerprint == lastSubmittedRawBytesFingerprint) return;
 
-        var (success, error) = await Main.Router.WriteDriverRegionAsync(request.RegionId, request.StartingAddress, bytes).ConfigureAwait(true);
+        var (success, error) = await Main.Router.WritePropertyBytesAsync(property, bytes).ConfigureAwait(true);
         RawBytesEditError = success ? null : error;
         if (success)
         {
-            property.ApplyWrittenBytes(bytes, mapper.References);
             lastSubmittedRawBytesFingerprint = fingerprint;
             OnPropertyChanged(nameof(HasPendingRawBytesEdit));
         }
     }
 
-    public void CancelRawBytesEdit()
+    [RelayCommand]
+    private void CancelRawBytesEdit()
     {
         LoadEditorValues();
         RawBytesEditError = null;
@@ -291,6 +290,20 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(SelectionRawBytesHex));
     }
 
+    // Everything derived from the active selection (ActiveNode or the raw-byte selection).
+    private static readonly string[] SelectionDependentProperties =
+    [
+        nameof(ActiveNode), nameof(SelectionParses), nameof(SelectionAddressRange), nameof(SelectionRawBytesHex),
+        nameof(HasSelection), nameof(HasSelectedProperty), nameof(IsEmpty), nameof(IsStaticValue),
+    ];
+
+    // Which editor shows; these also depend on ReferenceValues, so they are raised after it updates.
+    private static readonly string[] EditorCapabilityProperties =
+    [
+        nameof(CanEditReference), nameof(CanEditBoolean), nameof(CanEditNumber), nameof(CanEditString),
+        nameof(CanEditBitArray), nameof(HasEditableValue), nameof(ShowReadOnlyValue), nameof(CanEditRawBytes),
+    ];
+
     private void RaiseInspectorPropertiesChanged()
     {
         if (!isFrozen)
@@ -298,23 +311,9 @@ public sealed partial class PropertyToolViewModel : Tool, IDisposable
             UpdateFloatCapability();
         }
 
-        OnPropertyChanged(nameof(ActiveNode));
-        OnPropertyChanged(nameof(SelectionParses));
-        OnPropertyChanged(nameof(SelectionAddressRange));
-        OnPropertyChanged(nameof(SelectionRawBytesHex));
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(HasSelectedProperty));
-        OnPropertyChanged(nameof(IsEmpty));
-        OnPropertyChanged(nameof(IsStaticValue));
+        foreach (var name in SelectionDependentProperties) OnPropertyChanged(name);
         UpdateReferenceValues();
-        OnPropertyChanged(nameof(CanEditReference));
-        OnPropertyChanged(nameof(CanEditBoolean));
-        OnPropertyChanged(nameof(CanEditNumber));
-        OnPropertyChanged(nameof(CanEditString));
-        OnPropertyChanged(nameof(CanEditBitArray));
-        OnPropertyChanged(nameof(HasEditableValue));
-        OnPropertyChanged(nameof(ShowReadOnlyValue));
-        OnPropertyChanged(nameof(CanEditRawBytes));
+        foreach (var name in EditorCapabilityProperties) OnPropertyChanged(name);
         LoadEditorValues();
         EditError = null;
         RawBytesEditError = null;

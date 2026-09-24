@@ -6,5 +6,5 @@ namespace Gamehook.Infrastructure;
 // localhost on this port.
 public sealed record DriverRegistration(
     string Name,
-    Func<IServiceProvider, string?, IDriver> Factory,
+    Func<string?, IDriver> Factory,
     int? DefaultPort = null);

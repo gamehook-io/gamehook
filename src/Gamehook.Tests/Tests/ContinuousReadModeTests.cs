@@ -21,7 +21,7 @@ public sealed class ContinuousReadModeTests
     public async Task Disabling_continuous_read_stops_polling_and_reads_only_on_demand()
     {
         var mapper = new CountingMapper();
-        using var session = new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
+        using var session = new GamehookSession(new StubMapperFactory(mapper));
         Assert.That(await session.LoadAsync("stub.xml", "stub", null), Is.True);
 
         session.SetContinuousRead(false);
@@ -41,7 +41,7 @@ public sealed class ContinuousReadModeTests
     public async Task Router_load_starts_polling_for_any_host()
     {
         var mapper = new CountingMapper();
-        using var session = new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
+        using var session = new GamehookSession(new StubMapperFactory(mapper));
         var router = new GamehookRouter(session);
 
         Assert.That((await router.LoadAsync("stub.xml", "stub", null)).Success, Is.True);
@@ -53,7 +53,7 @@ public sealed class ContinuousReadModeTests
     public async Task Reenabling_continuous_read_resumes_polling_after_a_read_error()
     {
         var mapper = new CountingMapper();
-        using var session = new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
+        using var session = new GamehookSession(new StubMapperFactory(mapper));
         Assert.That(await session.LoadAsync("stub.xml", "stub", null), Is.True);
 
         mapper.FailNextRead = true;
@@ -73,7 +73,7 @@ public sealed class ContinuousReadModeTests
     public async Task Router_refuses_every_write_path_while_continuous_read_is_off()
     {
         var mapper = new CountingMapper();
-        using var session = new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
+        using var session = new GamehookSession(new StubMapperFactory(mapper));
         var router = new GamehookRouter(session);
         Assert.That((await router.LoadAsync("stub.xml", "stub", null)).Success, Is.True);
 
@@ -104,7 +104,7 @@ public sealed class ContinuousReadModeTests
                 .Build();
 
             var mapper = new CountingMapper();
-            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory()));
+            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(mapper)));
             Assert.That(instances.TryGet(0, out var router), Is.True);
             var session = router.Session;
             var settings = new SettingsService(instances, initialContinuousRead: true);
@@ -189,7 +189,7 @@ public sealed class ContinuousReadModeTests
                 .AddInMemoryCollection(new Dictionary<string, string?> { ["Port"] = port.ToString() })
                 .Build();
 
-            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(new CountingMapper()), new StubDriverFactory()));
+            using var instances = new GamehookInstances(() => new GamehookSession(new StubMapperFactory(new CountingMapper())));
             var settings = new SettingsService(instances, initialContinuousRead: true);
             var api = new GamehookApiHostedService(instances, [], new FilesystemProvider(configuration, directory.FullName, officialMappersEnabled: true), configuration,
                 NullLoggerFactory.Instance, new ApiBindStatus(), settings);
@@ -272,11 +272,6 @@ public sealed class ContinuousReadModeTests
         public IMapper Create(string mapperPath, string driverName, string? driverSourcePath = null) => mapper;
     }
 
-    internal sealed class StubDriverFactory : IDriverFactory
-    {
-        public IDriver Create(string name, string? sourcePath = null) => new StubDriver();
-    }
-
     internal sealed class StubDriver : IDriver
     {
         public Task<IDriver.Response> Read(IDriver.Request request) =>
@@ -326,12 +321,6 @@ public sealed class ContinuousReadModeTests
         {
             Interlocked.Increment(ref writes);
             return Task.FromResult<(bool, string?)>((true, null));
-        }
-
-        public async IAsyncEnumerable<bool> ReadContinuouslyAsync(TimeSpan interval, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
         }
     }
 }

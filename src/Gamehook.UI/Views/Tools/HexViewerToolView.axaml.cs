@@ -33,36 +33,13 @@ public partial class HexViewerToolView : UserControl
                 main.SelectBytes(selection.RegionId, selection.StartingAddress, selection.Bytes);
             }
         };
+        // The router refuses virtual (native-processor) regions and writes with continuous read off;
+        // either way the optimistic local edit is undone.
         HexViewer.ByteEditRequested += async (_, edit) =>
         {
-            if (DataContext is not HexViewerToolViewModel { Main: { Mapper: { } mapper } main })
-            {
-                return;
-            }
-
-            if (edit.RegionId.StartsWith("virtual:", StringComparison.Ordinal))
-            {
-                HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
-                return;
-            }
-
+            if (DataContext is not HexViewerToolViewModel { Main: { } main }) return;
             var (success, _) = await main.Router.WriteDriverRegionAsync(edit.RegionId, edit.Address, new[] { edit.NewValue });
-            if (!success)
-            {
-                HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
-                return;
-            }
-
-            // Raw pokes bypass property encoding, so the owning property (if any) never gets
-            // ApplyWrittenBytes from WriteAsync/SubmitRawBytesEditAsync - do it here, same as those
-            // paths, so the property tree/inspector don't show a stale value until the next poll.
-            if (edit.Owner is { Address: { } ownerAddress } owner && edit.Address >= ownerAddress
-                && edit.Address - ownerAddress < (ulong)owner.Bytes.Length)
-            {
-                var ownerBytes = owner.Bytes.ToArray();
-                ownerBytes[edit.Address - ownerAddress] = edit.NewValue;
-                owner.ApplyWrittenBytes(ownerBytes, mapper.References);
-            }
+            if (!success) HexViewer.RevertByte(edit.RegionId, edit.Address, edit.OriginalValue);
         };
         DataContextChanged += (_, _) => UpdateSubscription();
         AttachedToVisualTree += (_, _) => UpdateSubscription();

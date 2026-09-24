@@ -52,19 +52,6 @@ public static class MemoryRegion
             : $"Address 0x{address:X} has no supported memory region.");
     }
 
-    public static ReadOnlyMemory<byte> ReadBytes(
-        IReadOnlyList<IDriver.MemorySegmentSnapshot> segments,
-        string region,
-        ulong offset,
-        int length)
-    {
-        if (!TryReadBytes(segments, region, offset, length, out var bytes))
-        {
-            throw new InvalidDataException($"Driver response does not contain {length} byte(s) at {region}:0x{offset:X}.");
-        }
-        return bytes;
-    }
-
     // Drivers may omit a region entirely (e.g. RetroArch has no core memory map for it) rather than
     // treat that as fatal - callers use this to fall back to a null property value instead of throwing.
     public static bool TryReadBytes(

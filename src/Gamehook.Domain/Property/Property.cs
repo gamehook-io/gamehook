@@ -354,13 +354,6 @@ public abstract class Property : IProperty
             : Decode(bytes, references);
     }
 
-    // Compatibility path for callers that previously supplied one contiguous snapshot per
-    // region. New mapper reads may contain several sparse snapshots for same region.
-    public void Refresh(
-        IReadOnlyDictionary<string, IDriver.MemorySegmentSnapshot> segments,
-        IReadOnlyDictionary<string, ReferenceTable> references) =>
-        Refresh(segments.Values.ToArray(), references);
-
     protected abstract object? Decode(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references);
 
     /// Reverse of Decode. `currentBytes` is exactly Length bytes long (TryEncode already checked)

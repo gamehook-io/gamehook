@@ -24,7 +24,7 @@ public class FilesystemProvider
         WriteIndented = true,
     };
 
-    private readonly IConfiguration _configuration;
+    private readonly IConfiguration configuration;
     private readonly ILogger<FilesystemProvider> logger;
 
     public string GamehookProfileDirectory { get; }
@@ -51,7 +51,7 @@ public class FilesystemProvider
         bool officialMappersEnabled,
         ILogger<FilesystemProvider>? logger = null)
     {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        this.configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         this.logger = logger ?? NullLogger<FilesystemProvider>.Instance;
         GamehookProfileDirectory = Path.GetFullPath(profileDirectory);
         OfficialMappersEnabled = officialMappersEnabled;
@@ -102,7 +102,7 @@ public class FilesystemProvider
 
     /// The optional extra custom mapper directory from MapperDirectory, or null when unset.
     public string? GetConfiguredMapperDirectory() =>
-        _configuration["MapperDirectory"] is { } directory && !string.IsNullOrWhiteSpace(directory)
+        configuration["MapperDirectory"] is { } directory && !string.IsNullOrWhiteSpace(directory)
             ? Path.GetFullPath(directory)
             : null;
 
@@ -162,11 +162,6 @@ public class FilesystemProvider
         }
     }
 
-    public Dictionary<string, string> GetSaveStates()
-    {
-        return GetFiles("SaveStateDirectory", ".state");
-    }
-
     public string? GetLastOpenedSaveStateDirectory()
     {
         var directory = ReadLastOpenedProfile()?.SaveStateDirectory;
@@ -216,17 +211,7 @@ public class FilesystemProvider
         {
             Directory.CreateDirectory(GamehookProfileDirectory);
             var profile = update(ReadLastOpenedProfile() ?? new LastOpenedProfile());
-            var path = Path.Combine(GamehookProfileDirectory, LastOpenedFileName);
-            var temporaryPath = path + $".{Guid.NewGuid():N}.tmp";
-            try
-            {
-                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(profile, JsonOptions));
-                File.Move(temporaryPath, path, overwrite: true);
-            }
-            finally
-            {
-                File.Delete(temporaryPath);
-            }
+            AtomicFile.WriteAllText(Path.Combine(GamehookProfileDirectory, LastOpenedFileName), JsonSerializer.Serialize(profile, JsonOptions));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -235,9 +220,6 @@ public class FilesystemProvider
             return false;
         }
     }
-
-    private Dictionary<string, string> GetFiles(string configurationKey, string extension) =>
-        GetFilesIn(GetConfiguredDirectory(configurationKey), extension);
 
     private static Dictionary<string, string> GetFilesIn(string fullDirectory, string extension)
     {
@@ -256,18 +238,7 @@ public class FilesystemProvider
             StringComparer.Ordinal);
     }
 
-    private string GetConfiguredDirectory(string configurationKey)
-    {
-        var directory = _configuration[configurationKey];
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            return Path.GetFullPath(directory);
-        }
-
-        throw new InvalidOperationException($"Configuration value '{configurationKey}' is required.");
-    }
-
-    private static StringComparison PathComparison =>
+    public static StringComparison PathComparison =>
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static bool PathsEqual(string left, string right) => string.Equals(

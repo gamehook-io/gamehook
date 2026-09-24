@@ -6,15 +6,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Gamehook.Domain;
 
-// Owns the connect/poll/read state machine shared by every host (Avalonia UI, ConsoleUI, and any
-// future REST API): load a mapper+driver, poll it on an interval, and surface read failures,
-// driver connection drops, and missing-region data warnings as plain state a host can bind to.
 public sealed record PropertyChange(string Path, object? Value, byte[] Bytes);
 
+// Owns the connect/poll/read state machine shared by every host (Avalonia UI and REST API): load a
+// mapper+driver, poll it on an interval, and surface read failures, driver connection drops, and
+// missing-region data warnings as plain state a host can bind to.
 public sealed class GamehookSession : IDisposable
 {
     private readonly IMapperFactory mapperFactory;
-    private readonly IDriverFactory driverFactory;
     private readonly ILogger<GamehookSession> logger;
     private readonly SemaphoreSlim refreshGate = new(1, 1);
     private CancellationTokenSource? pollingCts;
@@ -22,12 +21,10 @@ public sealed class GamehookSession : IDisposable
     // read mode can stop the loop without forgetting it, and re-enabling it resumes at the same
     // cadence.
     private TimeSpan? requestedPollingInterval;
-    private IDriver? hexDriver;
     private int generation;
     private bool disposed;
 
     public IMapper? Mapper { get; private set; }
-    public IDriver? HexDriver => hexDriver;
 
     public bool IsConnecting { get; private set; }
 
@@ -49,11 +46,6 @@ public sealed class GamehookSession : IDisposable
     // Fires after any state change (load start/end, a read tick, a warning changing).
     public event Action? Changed;
 
-    // Fires only when the read produced a structurally different property set (new mapper loaded,
-    // or the driver's memory layout changed) - the signal a host needs to rebuild a property tree
-    // rather than just refresh displayed values.
-    public event Action? PropertiesReloaded;
-
     // Fires after every successful read tick with only the properties whose value/bytes changed
     // since the previous tick (empty on a tick with no changes; not fired at all on a failed read).
     // A websocket (or any other push transport) subscribes to this instead of re-diffing Properties
@@ -62,12 +54,10 @@ public sealed class GamehookSession : IDisposable
 
     private Dictionary<string, (object? Value, byte[] Bytes)> lastSnapshot = new(StringComparer.Ordinal);
 
-    public GamehookSession(IMapperFactory mapperFactory, IDriverFactory driverFactory, ILogger<GamehookSession>? logger = null)
+    public GamehookSession(IMapperFactory mapperFactory, ILogger<GamehookSession>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(mapperFactory);
-        ArgumentNullException.ThrowIfNull(driverFactory);
         this.mapperFactory = mapperFactory;
-        this.driverFactory = driverFactory;
         this.logger = logger ?? NullLogger<GamehookSession>.Instance;
     }
 
@@ -99,7 +89,6 @@ public sealed class GamehookSession : IDisposable
             }
 
             if (loadGeneration != generation) return false;
-            hexDriver = mapper.MemoryDriver ?? driverFactory.Create(driverName, driverSourcePath);
 
             Status = $"Loaded {Path.GetFileName(mapperPath)}.";
             return true;
@@ -190,7 +179,6 @@ public sealed class GamehookSession : IDisposable
             }
 
             Status = $"Read in {activeMapper.LastReadMetrics.Total.TotalMilliseconds:0.00} ms";
-            PropertiesReloaded?.Invoke();
             if (PropertiesChanged is { } handler)
             {
                 var changes = ComputePropertyChanges(activeMapper);
@@ -270,7 +258,6 @@ public sealed class GamehookSession : IDisposable
     {
         generation++;
         StopPolling();
-        DisposeHexDriver();
         UnloadFailedMapper();
         lastSnapshot = new(StringComparer.Ordinal);
         IsConnecting = false;
@@ -280,9 +267,8 @@ public sealed class GamehookSession : IDisposable
         Changed?.Invoke();
     }
 
-    private static string FormatExceptionStatus(Exception ex) => ex is TimeoutException
-        ? $"Error: {ex.Message} Is RetroArch running with Network Commands enabled?"
-        : $"Error: {ex.Message}";
+    // Driver messages name the driver and what to check; nothing here knows which driver it was.
+    private static string FormatExceptionStatus(Exception ex) => $"Error: {ex.Message}";
 
     private void AttachNativeProcessor(IMapper mapper)
     {
@@ -358,15 +344,5 @@ public sealed class GamehookSession : IDisposable
         try { mapper.Dispose(); }
         catch (Exception ex) { logger.LogWarning(ex, "Could not dispose mapper driver."); }
         finally { refreshGate.Release(); }
-    }
-
-    private void DisposeHexDriver()
-    {
-        if (!ReferenceEquals(hexDriver, Mapper?.MemoryDriver) && hexDriver is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
-
-        hexDriver = null;
     }
 }

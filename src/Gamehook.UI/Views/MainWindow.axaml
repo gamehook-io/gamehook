@@ -43,6 +43,13 @@
         <Style Selector="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         </Style>
+        <!-- Dock tab headers take the tab's own (state-dependent) foreground, not the global one above. -->
+        <Style Selector="dock|DocumentTabStripItem TextBlock">
+            <Setter Property="Foreground" Value="{Binding $parent[dock:DocumentTabStripItem].Foreground}" />
+        </Style>
+        <Style Selector="dock|ToolTabStripItem TextBlock">
+            <Setter Property="Foreground" Value="{Binding $parent[dock:ToolTabStripItem].Foreground}" />
+        </Style>
         <Style Selector="TextBlock.muted">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
         </Style>
@@ -100,7 +107,7 @@
         </Style>
         <Style Selector="Button.chrome">
             <Setter Property="Width" Value="46" />
-            <Setter Property="Height" Value="28" />
+            <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="CornerRadius" Value="0" />
             <Setter Property="Background" Value="Transparent" />
@@ -166,6 +173,25 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         </Style>
+        <!-- Top-level menu entries sit in the title bar: compact, rounded hover/open highlight. -->
+        <Style Selector="Menu > MenuItem">
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Foreground" Value="#C5C9D0" />
+        </Style>
+        <Style Selector="Menu > MenuItem:pointerover /template/ Border#PART_LayoutRoot, Menu > MenuItem:selected /template/ Border#PART_LayoutRoot, Menu > MenuItem:open /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="#2E3136" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Border.status-pill">
+            <Setter Property="Background" Value="#1A1B1D" />
+            <Setter Property="BorderBrush" Value="#34373C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="11" />
+            <Setter Property="Padding" Value="9,3,11,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
         <Style Selector="TreeViewItem" x:DataType="vm:PropertyTreeNodeViewModel">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             <Setter Property="Padding" Value="2,0" />
@@ -226,27 +252,60 @@
         <Style Selector="Border.pinned-row:pointerover">
             <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
         </Style>
+        <!-- Instance tabs: rounded-top tabs on a darker strip. The selected tab takes the surface
+             colour with an accent line on top; others stay flat until hovered. -->
         <Style Selector="ListBox.instance-tabs">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         </Style>
         <Style Selector="ListBox.instance-tabs ListBoxItem">
-            <Setter Property="Padding" Value="12,0,6,0" />
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="0,0,1,0" />
-            <Setter Property="Foreground" Value="#AAB0B8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
         </Style>
-        <Style Selector="ListBox.instance-tabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Style Selector="ListBox.instance-tabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.instance-tabs ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#1E2023" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.instance-tabs ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.instance-tabs ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
         </Style>
-        <Style Selector="ListBox.instance-tabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+        <Style Selector="ListBox.instance-tabs TextBlock.tab-title">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:pointerover TextBlock.tab-title">
+            <Setter Property="Foreground" Value="#C5C9D0" />
+        </Style>
+        <Style Selector="ListBox.instance-tabs ListBoxItem:selected TextBlock.tab-title">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Border.tab-indicator">
+            <Setter Property="Height" Value="2" />
+            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="CornerRadius" Value="0,0,2,2" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.tab-index">
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="MinWidth" Value="16" />
+            <Setter Property="Background" Value="#2C3036" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.tab-index TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
         </Style>
         <Style Selector="Button.tab-close, Button.tab-add">
             <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="2" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
@@ -255,14 +314,23 @@
         <Style Selector="Button.tab-close">
             <Setter Property="Width" Value="18" />
             <Setter Property="Height" Value="18" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <!-- Close shows on the selected tab and whichever tab is hovered, like a browser. -->
+        <Style Selector="ListBox.instance-tabs ListBoxItem:pointerover Button.tab-close, ListBox.instance-tabs ListBoxItem:selected Button.tab-close">
+            <Setter Property="Opacity" Value="1" />
         </Style>
         <Style Selector="Button.tab-add">
-            <Setter Property="Width" Value="30" />
-            <Setter Property="Height" Value="30" />
-            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Margin" Value="4,0,0,3" />
+        </Style>
+        <Style Selector="Button.tab-close:pointerover /template/ ContentPresenter, Button.tab-add:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#34383E" />
         </Style>
         <Style Selector="Button.tab-close:pointerover, Button.tab-add:pointerover">
-            <Setter Property="Background" Value="#33363B" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.tab-close:disabled">
@@ -270,7 +338,8 @@
         </Style>
         <Style Selector="Button.tab-close Path, Button.tab-add Path">
             <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}" />
-            <Setter Property="StrokeThickness" Value="1.2" />
+            <Setter Property="StrokeThickness" Value="1.3" />
+            <Setter Property="StrokeLineCap" Value="Round" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -282,35 +351,17 @@
         </Style>
     </Window.Styles>
 
-    <Border BorderBrush="#4A4D52" BorderThickness="1">
-        <Grid RowDefinitions="28,35,Auto,*">
+    <Border BorderBrush="#4A4D52" BorderThickness="1" Background="{StaticResource AppBackgroundBrush}">
+        <Grid RowDefinitions="38,Auto,*">
+            <!-- Title bar: app icon and menu on the left, window title in the middle (drag area),
+                 read status and window buttons on the right. -->
             <Border Grid.Row="0" Background="{StaticResource TitleBrush}"
-                    BorderBrush="#303236" BorderThickness="0,0,0,1"
+                    BorderBrush="#2B2D31" BorderThickness="0,0,0,1"
                     PointerPressed="TitleBar_PointerPressed">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Image Grid.Column="0" Width="16" Height="16" Margin="7,0,0,0"
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                    <Image Grid.Column="0" Width="16" Height="16" Margin="12,0,6,0"
                            Source="/icon.png" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding WindowTitle}"
-                               FontSize="11"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Classes="chrome" Click="MinimizeButton_Click" ToolTip.Tip="Minimize">
-                            <Path Data="M0,5 H10" />
-                        </Button>
-                        <Button Classes="chrome" Click="MaximizeButton_Click" ToolTip.Tip="Maximize">
-                            <Path x:Name="MaximizeRestoreIcon" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z" />
-                        </Button>
-                        <Button Classes="chrome close" Click="CloseButton_Click" ToolTip.Tip="Close">
-                            <Path Data="M0,0 L10,10 M10,0 L0,10" />
-                        </Button>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="Auto,*,Auto" Margin="3,0">
-                    <Menu Grid.Column="0" VerticalAlignment="Center">
+                    <Menu Grid.Column="1" VerticalAlignment="Center">
                         <MenuItem Header="File">
                             <MenuItem Header="New Instance" Command="{Binding AddInstanceCommand}" InputGesture="Ctrl+T" />
                             <MenuItem Header="Close Instance" Command="{Binding CloseInstanceCommand}" CommandParameter="{Binding SelectedInstance}" InputGesture="Ctrl+W" />
@@ -334,11 +385,14 @@
                             <MenuItem Header="About Gamehook" Click="AboutMenuItem_Click" />
                         </MenuItem>
                     </Menu>
+                    <TextBlock Grid.Column="2" Text="{Binding WindowTitle}" Classes="muted"
+                               FontSize="11" Margin="12,0" TextTrimming="CharacterEllipsis"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                    <!-- Read status for the selected tab. -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                Margin="0,0,4,0" DataContext="{Binding SelectedInstance}" x:DataType="vm:InstanceViewModel"
-                                IsVisible="{Binding HasReadingStatus, FallbackValue=False}">
+                    <!-- Read status for the selected tab; hover for the timing breakdown. -->
+                    <Border Grid.Column="3" Classes="status-pill" Margin="0,0,10,0"
+                            DataContext="{Binding SelectedInstance}" x:DataType="vm:InstanceViewModel"
+                            IsVisible="{Binding IsConnected, FallbackValue=False}">
                         <ToolTip.Tip>
                             <Border Padding="10,8" MinWidth="230">
                                 <StackPanel Spacing="7">
@@ -358,8 +412,8 @@
                                             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FooterPropertyTranslationTime}" />
                                             <TextBlock Grid.Row="2" Text="Inline calculations" Foreground="{StaticResource MutedTextBrush}" />
                                             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FooterInlineCalculationsTime}" />
-                                            <TextBlock Grid.Row="3" Text="Postprocessor" Foreground="{StaticResource MutedTextBrush}" />
-                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FooterPostprocessorTime}" />
+                                            <TextBlock Grid.Row="3" Text="Processors" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FooterProcessorsTime}" />
                                             <TextBlock Grid.Row="4" Text="Total" FontWeight="SemiBold" Margin="0,4,0,0" />
                                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding FooterTotalTime}" FontWeight="SemiBold" Margin="0,4,0,0" />
                                         </Grid>
@@ -369,16 +423,29 @@
                                 </StackPanel>
                             </Border>
                         </ToolTip.Tip>
-                        <TextBlock Text="●" FontSize="8" Margin="0,0,6,0" VerticalAlignment="Center"
-                                   Foreground="{Binding FooterStatusBrush}" />
-                        <TextBlock Text="{Binding ReadingStatusText}" FontSize="10" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{Binding FooterStatusBrush}" />
+                            <TextBlock Text="{Binding ReadingStatusText}" FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Column="4" Orientation="Horizontal">
+                        <Button Classes="chrome" Click="MinimizeButton_Click" ToolTip.Tip="Minimize">
+                            <Path Data="M0,5 H10" />
+                        </Button>
+                        <Button Classes="chrome" Click="MaximizeButton_Click" ToolTip.Tip="Maximize">
+                            <Path x:Name="MaximizeRestoreIcon" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z" />
+                        </Button>
+                        <Button Classes="chrome close" Click="CloseButton_Click" ToolTip.Tip="Close">
+                            <Path Data="M0,0 L10,10 M10,0 L0,10" />
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- One tab per instance. With more than one, each shows its index - the {index} in
-                 /instances/{index} API routes - after the title, e.g. "Dragon Warrior (0)". -->
-            <Border Grid.Row="2" Background="{StaticResource SurfaceMutedBrush}"
+                 /instances/{index} API routes - as a small badge after the title. -->
+            <Border Grid.Row="1" Background="{StaticResource AppBackgroundBrush}" Padding="6,6,6,0"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                 <Grid ColumnDefinitions="Auto,Auto,*">
                     <ListBox Grid.Column="0" Classes="instance-tabs" ItemsSource="{Binding Instances}"
@@ -390,21 +457,22 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:InstanceViewModel">
-                                <StackPanel Orientation="Horizontal" Spacing="7" ToolTip.Tip="{Binding Status}">
-                                    <TextBlock Text="●" FontSize="8" VerticalAlignment="Center"
-                                               Foreground="{Binding FooterStatusBrush}" IsVisible="{Binding IsConnected}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding TabTitle}" MaxWidth="220" TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Center" />
-                                        <TextBlock Text="{Binding Index, StringFormat='({0})'}" Classes="muted"
-                                                   VerticalAlignment="Center" IsVisible="{Binding ShowIndex}" />
+                                <Grid ColumnDefinitions="*,Auto" MinWidth="120" ToolTip.Tip="{Binding Status}">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                                                Margin="14,0,8,0" VerticalAlignment="Center">
+                                        <TextBlock Classes="tab-title" Text="{Binding TabTitle}" MaxWidth="220"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <Border Classes="tab-index" IsVisible="{Binding ShowIndex}">
+                                            <TextBlock Text="{Binding Index}" />
+                                        </Border>
                                     </StackPanel>
-                                    <Button Classes="tab-close" ToolTip.Tip="Close instance"
+                                    <Button Grid.Column="1" Classes="tab-close" Margin="0,0,8,0" ToolTip.Tip="Close instance (Ctrl+W)"
                                             Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).CloseInstanceCommand}"
                                             CommandParameter="{Binding}">
                                         <Path Data="M0,0 L8,8 M8,0 L0,8" />
                                     </Button>
-                                </StackPanel>
+                                    <Border Grid.ColumnSpan="2" Classes="tab-indicator" IsVisible="{Binding IsSelected}" />
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -415,7 +483,7 @@
                 </Grid>
             </Border>
 
-            <ItemsControl Grid.Row="3" ItemsSource="{Binding Instances}">
+            <ItemsControl Grid.Row="2" ItemsSource="{Binding Instances}">
                 <!-- Every tab's view stays alive (tree expansion, scroll, dock layout); only the
                      selected one is visible. -->
                 <ItemsControl.ItemsPanel>
@@ -430,24 +498,24 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Border Grid.RowSpan="4" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeWest_PointerPressed" />
-            <Border Grid.RowSpan="4" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
+            <Border Grid.RowSpan="3" Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast"
                     Background="Transparent" PointerPressed="ResizeEast_PointerPressed" />
-            <Border Grid.RowSpan="4" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeNorth_PointerPressed" />
-            <Border Grid.RowSpan="4" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
+            <Border Grid.RowSpan="3" Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth"
                     Background="Transparent" PointerPressed="ResizeSouth_PointerPressed" />
-            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Top"
                     Cursor="TopLeftCorner"
                     Background="Transparent" PointerPressed="ResizeNorthWest_PointerPressed" />
-            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Cursor="TopRightCorner"
                     Background="Transparent" PointerPressed="ResizeNorthEast_PointerPressed" />
-            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     Cursor="BottomLeftCorner"
                     Background="Transparent" PointerPressed="ResizeSouthWest_PointerPressed" />
-            <Border Grid.RowSpan="4" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            <Border Grid.RowSpan="3" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Cursor="BottomRightCorner"
                     Background="Transparent" PointerPressed="ResizeSouthEast_PointerPressed" />
         </Grid>

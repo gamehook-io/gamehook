@@ -8,9 +8,9 @@ public sealed class InstanceDriverReservationTests
 {
     private static readonly DriverRegistration[] Registrations =
     [
-        new("RetroArch", (_, _) => new StubDriver(), 55355),
-        new("SuperShuckie", (_, _) => new StubDriver(), 55356),
-        new("Save State", (_, _) => new StubDriver()),
+        new("RetroArch", _ => new StubDriver(), 55355),
+        new("SuperShuckie", _ => new StubDriver(), 55356),
+        new("Save State", _ => new StubDriver()),
     ];
 
     private static GamehookInstances CreateInstances(List<CountingMapper>? mappers = null) => new(
@@ -18,7 +18,7 @@ public sealed class InstanceDriverReservationTests
         {
             var mapper = new CountingMapper();
             mappers?.Add(mapper);
-            return new GamehookSession(new StubMapperFactory(mapper), new StubDriverFactory());
+            return new GamehookSession(new StubMapperFactory(mapper));
         },
         (driverName, sourcePath) => DriverResources.Identify(Registrations, driverName, sourcePath));
 

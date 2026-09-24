@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using NCalc;
 using NCalc.Exceptions;
 
-namespace Gamehook.Infrastructure;
+namespace Gamehook.Domain.Property;
 
 // Shared grammar for mapper address expressions. "{name}" is a compile-time macro/class variable:
 // resolved once, substituted textually, and recursed into (a variable's own value can reference
@@ -14,7 +14,7 @@ namespace Gamehook.Infrastructure;
 // "{{name}}" address collapses to a DeferredAddress - by the time a read happens, no regex is run,
 // no expression is parsed, and in the overwhelmingly common "{{token}} + constant" case no NCalc
 // evaluation happens either.
-internal static class AddressExpression
+public static class AddressExpression
 {
     private static readonly Regex DeferredToken = new(@"\{\{(\w+)\}\}", RegexOptions.Compiled);
 

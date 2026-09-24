@@ -1,3 +1,4 @@
+using Gamehook.Domain.Mapping;
 using Gamehook.Infrastructure;
 using Gamehook.Infrastructure.Drivers;
 
@@ -15,7 +16,7 @@ public sealed class MapperCompilationTests : BaseTest
             var driver = new SaveStateDriver(GetSaveStateFilePath("Pokemon Blue.state0"));
             Assert.DoesNotThrow(() =>
             {
-                using var mapper = new Mapper(mapperPath, driver);
+                using var mapper = new Mapper(MapperCompiler.Load(mapperPath), driver);
             }, mapperPath);
         }
     }

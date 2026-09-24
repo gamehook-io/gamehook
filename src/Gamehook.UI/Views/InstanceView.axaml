@@ -29,7 +29,7 @@
                                       PlaceholderText="Select a driver...">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:DriverChoice">
-                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock Text="{Binding Name}" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>

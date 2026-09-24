@@ -31,7 +31,7 @@ public static class DriverEndpoints
             var source = request.Source;
             if (request.Port is { } port)
             {
-                var registration = FindRegistration(registrations, request.Value);
+                var registration = DriverResources.Find(registrations, request.Value);
                 if (registration is not null && registration.DefaultPort is null)
                     return ApiProblems.BadRequest($"The {registration.Name} driver does not use a port.", "driver_port_not_supported");
 
@@ -62,7 +62,7 @@ public static class DriverEndpoints
         {
             if (!instances.TryGet(index, out var router))
                 return ApiProblems.InstanceNotFound(index);
-            var (bytes, error) = await router.ReadDriverRegionAsync(region, address, length).ConfigureAwait(false);
+            var (bytes, error) = await router.ReadRegionAsync(region, address, length).ConfigureAwait(false);
             return bytes is null
                 ? ApiProblems.Unprocessable(error ?? "Memory region could not be read.", "memory_read_failed")
                 : Results.Ok(bytes.Value.ToArray());
@@ -107,27 +107,8 @@ public static class DriverEndpoints
         .WithTags("Driver");
     }
 
-    private static DriverRegistration? FindRegistration(IEnumerable<DriverRegistration> registrations, string name) =>
-        registrations.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    internal static DriverResponse CreateDriverResponse(GamehookRouter router, IEnumerable<DriverRegistration> registrations)
-    {
-        var name = router.DriverName!;
-        int? port = null;
-        if (FindRegistration(registrations, name) is { DefaultPort: { } defaultPort })
-        {
-            try
-            {
-                port = NetworkEndpoint.Parse(router.DriverSourcePath, defaultPort, name).Port;
-            }
-            catch (ArgumentException)
-            {
-                // Router keeps an unparseable source when the driver failed to load; report no port.
-            }
-        }
-
-        return new DriverResponse(name, port);
-    }
+    internal static DriverResponse CreateDriverResponse(GamehookRouter router, IEnumerable<DriverRegistration> registrations) =>
+        new(router.DriverName!, DriverResources.GetPort(registrations, router.DriverName!, router.DriverSourcePath));
 }
 
 /// <summary>Selects a driver and optional source path.</summary>

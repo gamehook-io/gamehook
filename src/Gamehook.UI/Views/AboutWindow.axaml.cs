@@ -4,7 +4,6 @@ using Avalonia.Input;
 using Gamehook.Infrastructure.MapperUpdate;
 using Gamehook.Infrastructure.AppUpdate;
 using Avalonia.Threading;
-using System.Reflection;
 
 namespace Gamehook.UI.Views;
 
@@ -16,9 +15,7 @@ public partial class AboutWindow : Window
     public AboutWindow()
     {
         InitializeComponent();
-        AppVersionText.Text = typeof(AboutWindow).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
-            ?? typeof(AboutWindow).Assembly.GetName().Version?.ToString();
+        AppVersionText.Text = AppVersion.Current;
     }
 
     public AboutWindow(MapperUpdateService? mapperUpdateService, AppUpdateStatusProvider? updateStatus = null,

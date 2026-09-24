@@ -3,8 +3,6 @@ using Gamehook.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using System.Reflection;
-using System.Xml.Linq;
 
 namespace Gamehook.RestApi;
 
@@ -12,14 +10,7 @@ public static class MapperEndpoints
 {
     public static void MapMapperEndpoints(this WebApplication app)
     {
-        app.MapGet("/", () =>
-        {
-            var assembly = Assembly.GetEntryAssembly() ?? typeof(MapperEndpoints).Assembly;
-            var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
-                ?? assembly.GetName().Version?.ToString()
-                ?? string.Empty;
-            return Results.Ok(new { version });
-        })
+        app.MapGet("/", () => Results.Ok(new GamehookInfoResponse(Gamehook.UI.AppVersion.Current)))
         .WithName("GetGamehookInfo")
         .WithSummary("Returns Gamehook version information.")
         .Produces<GamehookInfoResponse>(StatusCodes.Status200OK)
@@ -28,14 +19,13 @@ public static class MapperEndpoints
         app.MapGet("/mappers", (GamehookInstances instances, FilesystemProvider filesystemProvider) =>
         {
             var loadedPaths = instances.Snapshot()
-                .Select((router, index) => (Index: index, Path: (router.Mapper as Gamehook.Infrastructure.Mapper)?.MapperPath))
+                .Select((router, index) => (Index: index, Path: router.MapperPath is { } path ? Path.GetFullPath(path) : null))
                 .Where(entry => entry.Path is not null)
                 .ToArray();
-            var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             var mappers = filesystemProvider.GetMappers().Select(pair =>
             {
                 var fullPath = Path.GetFullPath(pair.Value.Path);
-                var loadedIn = loadedPaths.Where(entry => string.Equals(fullPath, entry.Path, pathComparison)).Select(entry => entry.Index).ToArray();
+                var loadedIn = loadedPaths.Where(entry => string.Equals(fullPath, entry.Path, FilesystemProvider.PathComparison)).Select(entry => entry.Index).ToArray();
                 return DescribeMapper(pair.Key, pair.Value, loadedIn);
             });
             return Results.Ok(mappers);
@@ -106,7 +96,7 @@ public static class MapperEndpoints
     }
 
     internal static LoadedMapperResponse? CreateLoadedMapperResponse(GamehookRouter router, FilesystemProvider filesystemProvider) =>
-        router.Mapper is Gamehook.Infrastructure.Mapper mapper
+        router.Mapper is Gamehook.Domain.Mapping.Mapper mapper
             ? new LoadedMapperResponse(
                 mapper.Id,
                 mapper.GameName,
@@ -117,23 +107,7 @@ public static class MapperEndpoints
 
     private static AvailableMapperResponse DescribeMapper(string value, MapperFile file, int[] loadedIn)
     {
-        var path = file.Path;
-        var name = Path.GetFileNameWithoutExtension(path).Replace('_', ' ');
-        try
-        {
-            var root = XDocument.Load(path).Root;
-            return new AvailableMapperResponse(
-                value,
-                (string?)root?.Attribute("id"),
-                (string?)root?.Attribute("name") ?? name,
-                (string?)root?.Attribute("platform"),
-                file.IsCustom,
-                loadedIn.Length > 0,
-                loadedIn);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
-        {
-            return new AvailableMapperResponse(value, null, name, null, file.IsCustom, loadedIn.Length > 0, loadedIn);
-        }
+        var header = MapperCompiler.ReadHeader(file.Path);
+        return new AvailableMapperResponse(value, header.Id, header.Name, header.Platform, file.IsCustom, loadedIn.Length > 0, loadedIn);
     }
 }

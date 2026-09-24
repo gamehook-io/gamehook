@@ -45,6 +45,8 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
 
     private readonly UdpClient client;
     private readonly SemaphoreSlim configureLock = new(1, 1);
+    private readonly SemaphoreSlim readGate = new(1, 1);
+    private bool disposed;
 
     private MemoryMappedFile? mappedFile;
     private MemoryMappedViewAccessor? view;
@@ -70,36 +72,9 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
         finally { readGate.Release(); }
     }
 
-    private readonly SemaphoreSlim readGate = new(1, 1);
-    private bool disposed;
-
     private async Task<IDriver.Response> ReadCore(IDriver.Request request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.System);
-        ArgumentNullException.ThrowIfNull(request.Segments);
-
-        var addressable = new List<(IDriver.MemorySegmentRequest Segment, uint Address)>(request.Segments.Count);
-        foreach (var requestSegment in request.Segments)
-        {
-            if (requestSegment.Length < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(request), requestSegment.Length, "Segment length cannot be negative.");
-            }
-
-            // regions the driver can't address at all (no known base address for this system) are
-            // simply left out of the response - Property.Refresh reports those as a null value
-            // rather than failing the whole read.
-            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == requestSegment.RegionId)?.BusAddress is not { } baseAddress)
-            {
-                continue;
-            }
-
-            if (requestSegment.StartingAddress > uint.MaxValue - baseAddress
-                || (ulong)requestSegment.Length > (ulong)uint.MaxValue - baseAddress - requestSegment.StartingAddress + 1)
-                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
-            addressable.Add((requestSegment, baseAddress + (uint)requestSegment.StartingAddress));
-        }
+        var addressable = BusAddress.ResolveReadable(request);
 
         var offsets = await EnsureConfigured(addressable).ConfigureAwait(false);
 
@@ -132,23 +107,10 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
     public async Task Write(IDriver.WriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.System);
-        ArgumentNullException.ThrowIfNull(request.Segments);
-
         foreach (var segment in request.Segments)
         {
             if (segment.Bytes.Length == 0) continue;
-
-            if (request.System.RegionDefinitions.FirstOrDefault(region => region.Id == segment.RegionId)?.BusAddress is not { } baseAddress)
-            {
-                throw new NotSupportedException($"No known base address for region '{segment.RegionId}' on {request.System.Id}.");
-            }
-
-            if (segment.StartingAddress > uint.MaxValue - baseAddress
-                || (ulong)segment.Bytes.Length > (ulong)uint.MaxValue - baseAddress - segment.StartingAddress + 1)
-                throw new ArgumentOutOfRangeException(nameof(request), "Requested segment exceeds the address space.");
-
-            var address = baseAddress + (uint)segment.StartingAddress;
+            var address = BusAddress.Require(request.System, segment);
             await SendWriteAndAwaitAck(address, segment.Bytes).ConfigureAwait(false);
         }
     }
@@ -167,24 +129,7 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
         await configureLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            Exception? lastError = null;
-            for (var attempt = 0; attempt < AckSendAttempts; attempt++)
-            {
-                try
-                {
-                    await client.SendAsync(packet, packet.Length).ConfigureAwait(false);
-                    if (await TryReceiveAck(Instruction.Write).ConfigureAwait(false))
-                    {
-                        return;
-                    }
-                }
-                catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
-                {
-                    lastError = ex;
-                }
-            }
-
-            throw new TimeoutException($"Super Shuckie did not acknowledge the write to 0x{address:x}.", lastError);
+            await SendAndAwaitAck(packet, Instruction.Write, $"Super Shuckie did not acknowledge the write to 0x{address:x}.").ConfigureAwait(false);
         }
         finally
         {
@@ -267,16 +212,18 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
             BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(offset + 8, 4), blocks[i].Length);
         }
 
+        await SendAndAwaitAck(packet, Instruction.Setup, "Super Shuckie did not acknowledge the Poke-A-Byte setup request.").ConfigureAwait(false);
+    }
+
+    private async Task SendAndAwaitAck(byte[] packet, Instruction instruction, string timeoutMessage)
+    {
         Exception? lastError = null;
         for (var attempt = 0; attempt < AckSendAttempts; attempt++)
         {
             try
             {
                 await client.SendAsync(packet, packet.Length).ConfigureAwait(false);
-                if (await TryReceiveAck(Instruction.Setup).ConfigureAwait(false))
-                {
-                    return;
-                }
+                if (await TryReceiveAck(instruction).ConfigureAwait(false)) return;
             }
             catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
             {
@@ -284,7 +231,7 @@ public sealed class SuperShuckieDriver : IDriver, IDisposable
             }
         }
 
-        throw new TimeoutException("Super Shuckie did not acknowledge the Poke-A-Byte setup request.", lastError);
+        throw new TimeoutException(timeoutMessage, lastError);
     }
 
     private async Task<bool> TryReceiveAck(Instruction expected)

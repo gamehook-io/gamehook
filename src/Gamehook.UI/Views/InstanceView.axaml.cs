@@ -13,58 +13,31 @@ public partial class InstanceView : UserControl
 
     private async void BrowseSaveStateButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storageProvider)
+        if (DataContext is not InstanceViewModel viewModel || TopLevel.GetTopLevel(this) is not { } topLevel)
         {
             return;
         }
 
-        var viewModel = DataContext as InstanceViewModel;
-        var startDirectory = viewModel?.GetLastOpenedSaveStateDirectory();
-        if (startDirectory is null && viewModel?.SelectedSaveStatePath is { } selectedPath)
+        var startDirectory = viewModel.GetLastOpenedSaveStateDirectory()
+            ?? (viewModel.SelectedSaveStatePath is { } selectedPath ? Path.GetDirectoryName(selectedPath) : null);
+        if (await PickFileAsync(topLevel, "Select a save-state file", startDirectory, "Save-state files", "*.state") is not { } path)
         {
-            startDirectory = Path.GetDirectoryName(selectedPath);
+            return;
         }
 
-        var startLocation = startDirectory is null
-            ? null
-            : await storageProvider.TryGetFolderFromPathAsync(startDirectory);
-
-        var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        viewModel.SelectedSaveStatePath = path;
+        if (Path.GetDirectoryName(path) is { } directory)
         {
-            Title = "Select a save-state file",
-            AllowMultiple = false,
-            SuggestedStartLocation = startLocation,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("Save-state files") { Patterns = ["*.state"] },
-                FilePickerFileTypes.All,
-            ],
-        });
-
-        if (files.FirstOrDefault() is { } file && viewModel is not null)
-        {
-            var path = file.TryGetLocalPath() ?? file.Path.LocalPath;
-            viewModel.SelectedSaveStatePath = path;
-            if (Path.GetDirectoryName(path) is { } directory)
-            {
-                viewModel.RememberLastOpenedSaveStateDirectory(directory);
-            }
+            viewModel.RememberLastOpenedSaveStateDirectory(directory);
         }
     }
 
     private async void BrowseMapperButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (DataContext is not InstanceViewModel viewModel)
+        if (DataContext is InstanceViewModel viewModel && TopLevel.GetTopLevel(this) is { } topLevel)
         {
-            return;
+            await BrowseMapperAsync(topLevel, viewModel, loadAfterSelection: false);
         }
-
-        if (TopLevel.GetTopLevel(this) is not { } topLevel)
-        {
-            return;
-        }
-
-        await BrowseMapperAsync(topLevel, viewModel, loadAfterSelection: false);
     }
 
     // Shared with MainWindow's File > Load Mapper… menu item, which browses for the selected tab.
@@ -74,28 +47,11 @@ public partial class InstanceView : UserControl
             ?? (viewModel.SelectedMapper is { } selectedMapper
                 ? Path.GetDirectoryName(selectedMapper.FullPath)
                 : viewModel.GetMapperDirectory());
-        var startLocation = startDirectory is null
-            ? null
-            : await topLevel.StorageProvider.TryGetFolderFromPathAsync(startDirectory);
-
-        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Select a mapper file",
-            AllowMultiple = false,
-            SuggestedStartLocation = startLocation,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("Mapper files") { Patterns = ["*.xml"] },
-                FilePickerFileTypes.All,
-            ],
-        });
-
-        if (files.FirstOrDefault() is not { } file)
+        if (await PickFileAsync(topLevel, "Select a mapper file", startDirectory, "Mapper files", "*.xml") is not { } path)
         {
             return;
         }
 
-        var path = file.TryGetLocalPath() ?? file.Path.LocalPath;
         viewModel.SelectMapperFile(path);
         if (Path.GetDirectoryName(path) is { } directory)
         {
@@ -110,5 +66,19 @@ public partial class InstanceView : UserControl
         {
             viewModel.ShowLoadScreen();
         }
+    }
+
+    private static async Task<string?> PickFileAsync(TopLevel topLevel, string title, string? startDirectory, string fileTypeName, string pattern)
+    {
+        var storage = topLevel.StorageProvider;
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            SuggestedStartLocation = startDirectory is null ? null : await storage.TryGetFolderFromPathAsync(startDirectory),
+            FileTypeFilter = [new FilePickerFileType(fileTypeName) { Patterns = [pattern] }, FilePickerFileTypes.All],
+        });
+
+        return files.FirstOrDefault() is { } file ? file.TryGetLocalPath() ?? file.Path.LocalPath : null;
     }
 }

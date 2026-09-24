@@ -103,12 +103,10 @@ public sealed class DockFactory : Factory
         return rootDock;
     }
 
-    // Floating property snapshots are the only dockables that can close - route their close
-    // through the hide/restore path instead of removing them outright.
+    // Floating property snapshots are disposable windows: their close button removes the snapshot.
+    // Main-layout tools are only hidden.
     public override void CloseDockable(IDockable? dockable)
     {
-        // Floating property snapshots are disposable windows. Unlike main-layout tools, their
-        // close button removes the snapshot instead of merely hiding a panel.
         if (dockable is PropertyToolViewModel { IsFloatingSnapshot: true })
         {
             base.CloseDockable(dockable);
@@ -149,15 +147,7 @@ public sealed class DockFactory : Factory
         inspector.CanClose = true;
         inspector.CanFloat = false;
 
-        var replacement = new PropertyToolViewModel(main, suppressCurrentSelection: true)
-        {
-            CanClose = false,
-            CanPin = false,
-            CanFloat = true,
-            CanDockAsDocument = false,
-            CanDrag = false,
-            CanDrop = false,
-        };
+        var replacement = InstanceViewModel.Lock(new PropertyToolViewModel(main, suppressCurrentSelection: true), canFloat: true);
         AddDockable(sourceDock, replacement);
         sourceDock.ActiveDockable = replacement;
         PropertyInspectorReplaced?.Invoke(replacement);

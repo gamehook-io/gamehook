@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Gamehook.Domain;
-using Gamehook.Domain.Models;
+using Gamehook.RestApi;
 using Gamehook.Infrastructure.MapperUpdate;
 using Gamehook.Infrastructure.AppUpdate;
 using Gamehook.UI.ViewModels;

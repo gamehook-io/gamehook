@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Gamehook.Domain.Interface;
@@ -117,7 +116,7 @@ public sealed partial class PropertyTreeNodeViewModel(string name, IProperty? pr
         {
             lastFormattedValue = current;
             hasFormattedValue = true;
-            var value = Property?.Type == "bitArray" ? "" : FormatValue(current);
+            var value = Property?.Type == "bitArray" ? "" : ValueFormatter.Format(current);
             if (!string.Equals(DisplayValue, value, StringComparison.Ordinal))
             {
                 DisplayValue = value;
@@ -133,14 +132,6 @@ public sealed partial class PropertyTreeNodeViewModel(string name, IProperty? pr
             RawBytesHex = Property?.RawBytesHex ?? string.Empty;
         }
     }
-
-    private static string FormatValue(object? value) => value switch
-    {
-        null => "",
-        byte[] bytes => Convert.ToHexString(bytes),
-        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
-        _ => value.ToString() ?? "",
-    };
 
     private sealed class NumericPathComparer : IComparer<string>
     {

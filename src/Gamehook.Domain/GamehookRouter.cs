@@ -31,6 +31,14 @@ public sealed class GamehookRouter
 
     public IMapper? Mapper => Session.Mapper;
 
+    /// A driver and mapper are loaded, the last read succeeded, and nothing is being warned about.
+    public bool IsHealthy =>
+        DriverName is not null
+        && Session.IsConnected
+        && !Session.IsConnecting
+        && Session.ConnectionWarning is null
+        && Session.DataWarning is null;
+
     /// The one real load path - every host (UI's Load button, the API's POST /mapper, the API's
     /// POST /driver reload-in-place) funnels through this. Remembers the driver/mapper it was
     /// given so a later single-argument call (SetDriverAsync, LoadMapperAsync) can reuse them.
@@ -76,7 +84,7 @@ public sealed class GamehookRouter
         if (mapperPath is null)
         {
             if (FindDriverConflict(driverName, sourcePath) is { } conflict)
-                return Task.FromResult<(bool, string?)>((false, conflict));
+                return Fail(conflict);
             DriverName = driverName;
             DriverSourcePath = sourcePath;
             return Task.FromResult<(bool, string?)>((true, null));
@@ -93,7 +101,7 @@ public sealed class GamehookRouter
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
         return DriverName is null
-            ? Task.FromResult<(bool, string?)>((false, "No driver selected."))
+            ? Fail("No driver selected.")
             : LoadAsync(mapperPath, DriverName, DriverSourcePath, cancellationToken);
     }
 
@@ -125,100 +133,83 @@ public sealed class GamehookRouter
     // Every host's writes (REST API, property inspector, hex editor, popped-out inspector windows)
     // come through the three Write* methods below, so continuous read mode's "no writes" rule is enforced
     // here once rather than at each call site.
-    private bool TryRejectWrite(out Task<(bool Success, string? Error)> rejection)
-    {
-        if (Session.IsContinuousReadEnabled)
-        {
-            rejection = null!;
-            return false;
-        }
+    private bool WritesDisabled => !Session.IsContinuousReadEnabled;
 
-        rejection = Task.FromResult<(bool, string?)>((false, ContinuousReadDisabledWriteError));
-        return true;
-    }
+    private static Task<(bool Success, string? Error)> Fail(string error) => Task.FromResult<(bool, string?)>((false, error));
 
     public Task<(bool Success, string? Error)> WritePropertyValueAsync(string path, object? value, CancellationToken cancellationToken = default)
     {
-        if (TryRejectWrite(out var rejection)) return rejection;
+        if (WritesDisabled) return Fail(ContinuousReadDisabledWriteError);
         return Session.Mapper is { } mapper
             ? mapper.WriteAsync(path, value, cancellationToken)
-            : Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
+            : Fail("No mapper loaded.");
     }
 
     /// Raw byte poke scoped to one property's own address/region - reuses the same region-relative
     /// offset convention as WriteRawBytesAsync (see BuildRequest).
     public Task<(bool Success, string? Error)> WritePropertyBytesAsync(IProperty property, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
-        if (TryRejectWrite(out var rejection)) return rejection;
-        if (Session.Mapper is not { } mapper) return Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
-        if (property.Address is not { } address || property.Region is not { } region)
-            return Task.FromResult<(bool, string?)>((false, "Property has no fixed address; write 'value' instead."));
-        if (!TryResolveOffset(mapper.System, region, address, out var offset, out var error))
-            return Task.FromResult<(bool, string?)>((false, error));
+        if (WritesDisabled) return Fail(ContinuousReadDisabledWriteError);
+        if (Session.Mapper is not { } mapper) return Fail("No mapper loaded.");
+        if (!property.IsWritable || property.BuildRequest() is not { } request)
+            return Fail("Property has no fixed address; write 'value' instead.");
 
-        return mapper.WriteRawBytesAsync(region, offset, bytes, cancellationToken);
+        return mapper.WriteRawBytesAsync(request.RegionId, request.StartingAddress, bytes, cancellationToken);
     }
 
-    /// Resolves a region id case-insensitively against the loaded mapper's system (e.g. "wram" -> "WRAM").
-    public string? ResolveRegionId(string region) =>
-        Session.Mapper is { } mapper
-            ? mapper.System.RegionDefinitions.FirstOrDefault(r => string.Equals(r.Id, region, StringComparison.OrdinalIgnoreCase))?.Id
-            : null;
+    /// Prefix of a native processor's virtual regions: read-only buffers that never exist on the device.
+    public const string VirtualRegionPrefix = "virtual:";
 
-    public async Task<(ReadOnlyMemory<byte>? Bytes, string? Error)> ReadDriverRegionAsync(string region, ulong? offset, int? length)
+    /// Regions a memory viewer can show: every system region with a known size, plus the loaded
+    /// mapper's native-processor regions as "virtual:{id}".
+    public IReadOnlyList<string> RegionIds => Session.Mapper is not { } mapper
+        ? []
+        : mapper.System.RegionDefinitions.Where(region => region.Length is > 0).Select(region => region.Id)
+            .Concat(mapper.VirtualMemoryRegions.Select(region => VirtualRegionPrefix + region.Id))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    /// Resolves a device region id case-insensitively against the loaded mapper's system (e.g. "wram" -> "WRAM").
+    public string? ResolveRegionId(string region) => Session.Mapper?.System.FindRegion(region)?.Id;
+
+    /// Reads a whole region (offset and length both omitted) or a slice of it. Virtual regions come
+    /// from the mapper's last native-processor output; device regions from the mapper's driver.
+    public async Task<(ReadOnlyMemory<byte>? Bytes, string? Error)> ReadRegionAsync(string region, ulong? offset = null, int? length = null)
     {
         if (Session.Mapper is not { } mapper) return (null, "No mapper loaded.");
-        if (Session.HexDriver is not { } driver) return (null, "No driver connected.");
+        if (Session.IsConnecting) return (null, "The mapper is still connecting.");
+        if (offset.HasValue != length.HasValue) return (null, "address and length must be supplied together.");
 
-        var regionId = ResolveRegionId(region);
-        if (regionId is null) return (null, $"Unknown region '{region}'.");
-
-        ulong resolvedOffset;
-        int resolvedLength;
-        if (offset is null && length is null)
+        if (region.StartsWith(VirtualRegionPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            var definition = mapper.System.RegionDefinitions.First(r => r.Id == regionId);
-            if (definition.Length is not { } wholeLength)
-                return (null, $"Region '{region}' has no known size; supply address & length.");
-            resolvedOffset = 0;
-            resolvedLength = wholeLength;
-        }
-        else if (offset is { } o && length is { } l)
-        {
-            resolvedOffset = o;
-            resolvedLength = l;
-        }
-        else
-        {
-            return (null, "address and length must be supplied together.");
+            var id = region[VirtualRegionPrefix.Length..];
+            if (mapper.VirtualMemoryRegions.FirstOrDefault(r => r.Id == id) is not { } virtualRegion)
+                return (null, $"Unknown region '{region}'.");
+            if (offset is not { } start || length is not { } count) return (virtualRegion.Bytes, null);
+            return start <= (ulong)virtualRegion.Bytes.Length && (ulong)count <= (ulong)virtualRegion.Bytes.Length - start
+                ? (virtualRegion.Bytes.Slice((int)start, count), null)
+                : (null, $"The requested range is outside '{region}'.");
         }
 
-        var response = await driver.Read(new IDriver.Request(mapper.System, [new IDriver.MemorySegmentRequest(regionId, resolvedOffset, resolvedLength)])).ConfigureAwait(false);
-        var segment = response.Segments.FirstOrDefault(s => s.RegionId == regionId);
+        if (mapper.System.FindRegion(region) is not { } definition) return (null, $"Unknown region '{region}'.");
+        if (mapper.MemoryDriver is not { } driver) return (null, "No driver connected.");
+        if ((length ?? definition.Length) is not { } resolvedLength)
+            return (null, $"Region '{region}' has no known size; supply address & length.");
+
+        var request = new IDriver.MemorySegmentRequest(definition.Id, offset ?? 0, resolvedLength);
+        var response = await driver.Read(new IDriver.Request(mapper.System, [request])).ConfigureAwait(false);
+        var segment = response.Segments.FirstOrDefault(s => s.RegionId == definition.Id);
         return segment is null ? (null, $"Driver returned no data for '{region}'.") : (segment.Bytes, null);
     }
 
     public Task<(bool Success, string? Error)> WriteDriverRegionAsync(string region, ulong offset, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
-        if (TryRejectWrite(out var rejection)) return rejection;
-        if (Session.Mapper is not { } mapper) return Task.FromResult<(bool, string?)>((false, "No mapper loaded."));
+        if (WritesDisabled) return Fail(ContinuousReadDisabledWriteError);
+        if (Session.Mapper is not { } mapper) return Fail("No mapper loaded.");
+        if (region.StartsWith(VirtualRegionPrefix, StringComparison.OrdinalIgnoreCase)) return Fail($"Region '{region}' is read-only.");
         var regionId = ResolveRegionId(region);
-        if (regionId is null) return Task.FromResult<(bool, string?)>((false, $"Unknown region '{region}'."));
+        if (regionId is null) return Fail($"Unknown region '{region}'.");
 
         return mapper.WriteRawBytesAsync(regionId, offset, bytes, cancellationToken);
-    }
-
-    private static bool TryResolveOffset(GameSystem system, string regionId, ulong absoluteAddress, out ulong offset, out string? error)
-    {
-        var definition = system.RegionDefinitions.FirstOrDefault(r => r.Id == regionId);
-        if (definition?.BusAddress is not { } busAddress)
-        {
-            offset = 0;
-            error = $"Region '{regionId}' has no known base address.";
-            return false;
-        }
-        offset = absoluteAddress - busAddress;
-        error = null;
-        return true;
     }
 }

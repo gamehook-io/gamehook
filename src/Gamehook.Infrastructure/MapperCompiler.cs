@@ -2,28 +2,18 @@ using System.Globalization;
 using System.Xml.Linq;
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Mapping;
 using Gamehook.Domain.Models;
 using Gamehook.Domain.Property;
 using Jint;
 
 namespace Gamehook.Infrastructure;
 
-// Everything Mapper needs to run reads, derived once from a mapper's <mapper> XML root.
-internal sealed record MapperCompilationResult(
-    IReadOnlyDictionary<string, ReferenceTable> References,
-    IReadOnlyList<IDriver.MemorySegmentRequest> Requests,
-    IReadOnlyList<Property> CompiledProperties,
-    IReadOnlyList<(Property Property, DeferredAddress Address)> DynamicAddressProperties,
-    // Distinct script-set variable names every DeferredAddress indexes into, so a read resolves
-    // each one once instead of once per property that mentions it.
-    IReadOnlyList<string> RuntimeTokenNames,
-    IReadOnlyList<(Property Property, CompiledExpression Expression)> ExpressionBindings);
-
-// Turns a mapper's XML into compiled properties, driver requests, reference tables, condition
-// chains, and the two script-dependent bindings (dynamic addresses, after-read-value-expression).
-// Kept separate from Mapper so "how does XML become properties" and "how does a read cycle work"
-// can each be read on their own - this class never touches a driver or runs a read.
-internal sealed class MapperCompiler
+// Reads a mapper file (XML plus its optional companion .js) into a MapperDefinition: compiled
+// properties, driver requests, reference tables, and the two script-dependent bindings (dynamic
+// addresses, after-read-value-expression). The read cycle itself is Domain's Mapper - this class
+// never touches a driver or runs a read.
+public sealed class MapperCompiler
 {
     private static readonly XNamespace VarNamespace = "https://schema.gamehook.io/attributes/var";
 
@@ -37,7 +27,7 @@ internal sealed class MapperCompiler
     private readonly IReadOnlyDictionary<string, XElement> macros;
     private readonly List<Property> compiledProperties = [];
     private readonly List<(Property Property, DeferredAddress Address)> dynamicAddressProperties = [];
-    private readonly List<(Property Property, CompiledExpression Expression)> expressionBindings = [];
+    private readonly List<(Property Property, Func<double, double> Expression)> expressionBindings = [];
     private readonly List<string> runtimeTokenNames = [];
 
     private MapperCompiler(GameSystem system, ExpressionEngine scriptEngine, IReadOnlyDictionary<string, XElement> macros)
@@ -47,25 +37,73 @@ internal sealed class MapperCompiler
         this.macros = macros;
     }
 
-    public static MapperCompilationResult Compile(XElement root, GameSystem system, ExpressionEngine scriptEngine)
+    public static MapperDefinition Load(string mapperPath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
+        var fullPath = Path.GetFullPath(mapperPath);
+        var root = XDocument.Load(fullPath, LoadOptions.None).Root ?? throw new InvalidDataException("Mapper has no root element.");
+        if (root.Name.LocalName != "mapper")
+        {
+            throw new InvalidDataException("Mapper root element must be 'mapper'.");
+        }
+
+        var platform = (string?)root.Attribute("platform");
+        var system = GameSystem.All.SingleOrDefault(x => x.Id == platform)
+            ?? throw new NotSupportedException($"Unsupported mapper platform '{platform}'.");
         var propertiesElement = root.Element("properties") ?? throw new InvalidDataException("Mapper has no properties element.");
+        var scriptEngine = new ExpressionEngine();
         var compiler = new MapperCompiler(system, scriptEngine, Index(root.Element("macros")));
         var references = ReadReferences(root.Element("references"));
         var memoryBlockRequests = compiler.ReadMemoryBlocks(root.Element("memory"));
 
         compiler.CompileProperties(propertiesElement.Elements(), new Dictionary<string, string>(StringComparer.Ordinal), null);
 
-        var requests = MergeRequests(BuildRequests(compiler.compiledProperties).Concat(memoryBlockRequests));
+        var scriptPath = Path.ChangeExtension(fullPath, ".js");
+        var scriptSource = File.Exists(scriptPath) ? File.ReadAllText(scriptPath) : null;
+        if (scriptSource is null && compiler.dynamicAddressProperties.Count > 0)
+        {
+            var (property, deferred) = compiler.dynamicAddressProperties[0];
+            throw new InvalidDataException(
+                $"Mapper '{Path.GetFileName(fullPath)}' requires script '{Path.GetFileName(scriptPath)}' " +
+                $"to resolve address '{deferred.Source}' for property '{property.Name}', but the script file is missing. " +
+                "Place the matching .js file beside the mapper XML.");
+        }
 
-        return new MapperCompilationResult(
+        return new MapperDefinition(
+            fullPath,
+            (string?)root.Attribute("id"),
+            (string?)root.Attribute("name") ?? DefaultGameName(fullPath),
+            system,
+            (string?)root.Attribute("nativeProcessor"),
+            scriptEngine,
+            scriptSource,
             references,
-            requests,
+            MergeRequests(BuildRequests(compiler.compiledProperties).Concat(memoryBlockRequests)),
             compiler.compiledProperties,
             compiler.dynamicAddressProperties,
             compiler.runtimeTokenNames,
             compiler.expressionBindings);
     }
+
+    /// A mapper's root attributes without compiling it, for listings. A file that can't be read or
+    /// parsed keeps only its file-derived name.
+    public static MapperHeader ReadHeader(string mapperPath)
+    {
+        try
+        {
+            var root = XDocument.Load(mapperPath).Root;
+            return new MapperHeader(
+                (string?)root?.Attribute("id"),
+                (string?)root?.Attribute("name") ?? DefaultGameName(mapperPath),
+                (string?)root?.Attribute("platform"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            return new MapperHeader(null, DefaultGameName(mapperPath), null);
+        }
+    }
+
+    private static string DefaultGameName(string mapperPath) => Path.GetFileNameWithoutExtension(mapperPath).Replace('_', ' ');
 
     private int InternRuntimeToken(string name)
     {
@@ -251,11 +289,8 @@ internal sealed class MapperCompiler
         }).ToArray();
     }
 
-    private static IReadOnlyList<IDriver.MemorySegmentRequest> BuildRequests(IEnumerable<IProperty> properties) =>
-        MergeRequests(properties
-            .Select(x => x.BuildRequest())
-            .Where(x => x is not null)
-            .Select(x => x!));
+    private static IEnumerable<IDriver.MemorySegmentRequest> BuildRequests(IEnumerable<IProperty> properties) =>
+        properties.Select(x => x.BuildRequest()).OfType<IDriver.MemorySegmentRequest>();
 
     private static IReadOnlyList<IDriver.MemorySegmentRequest> MergeRequests(IEnumerable<IDriver.MemorySegmentRequest> segments)
     {
@@ -287,3 +322,5 @@ internal sealed class MapperCompiler
             .ToArray();
     }
 }
+
+public sealed record MapperHeader(string? Id, string Name, string? Platform);

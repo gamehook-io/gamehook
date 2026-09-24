@@ -13,7 +13,7 @@ public static class HealthEndpoints
         {
             // Instances nobody has picked a driver for (a fresh, untouched tab) don't count against health.
             var inUse = instances.Snapshot().Where(router => router.DriverName is not null).ToArray();
-            return HealthResult(inUse.Length > 0 && inUse.All(IsHealthy));
+            return HealthResult(inUse.Length > 0 && inUse.All(router => router.IsHealthy));
         })
         .WithName("GetHealth")
         .WithSummary("Reports whether every instance in use has a loaded mapper and a healthy mapper session.")
@@ -27,7 +27,7 @@ public static class HealthEndpoints
     {
         instance.MapGet("/health", (int index, GamehookInstances instances) =>
             instances.TryGet(index, out var router)
-                ? HealthResult(IsHealthy(router))
+                ? HealthResult(router.IsHealthy)
                 : ApiProblems.InstanceNotFound(index))
         .WithName("GetInstanceHealth")
         .WithSummary("Reports whether this instance has a loaded mapper and a healthy mapper session.")
@@ -36,17 +36,6 @@ public static class HealthEndpoints
         .Produces(StatusCodes.Status503ServiceUnavailable, contentType: "text/plain")
         .ProducesProblem(StatusCodes.Status404NotFound)
         .WithTags("Instance");
-    }
-
-    private static bool IsHealthy(GamehookRouter router)
-    {
-        var session = router.Session;
-        return router.Mapper is not null
-            && router.DriverName is not null
-            && session.IsConnected
-            && !session.IsConnecting
-            && session.ConnectionWarning is null
-            && session.DataWarning is null;
     }
 
     private static IResult HealthResult(bool healthy) => healthy

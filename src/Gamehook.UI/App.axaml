@@ -15,6 +15,44 @@
                     <ControlRecycling x:Key="ControlRecyclingKey" />
                 </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Dock panel chrome, matched to MainWindow's palette: headers and gaps use the dark
+                 strip colour (#151617), panel content the surface (#1B1C1E), and the selected
+                 document tab is raised (#232529) with an accent line under the strip while focused.
+                 Here rather than in MainWindow so floating inspector windows pick it up too. -->
+            <SolidColorBrush x:Key="DockThemeAccentBrush" Color="#3D82CF" />
+            <SolidColorBrush x:Key="DockThemeBackgroundBrush" Color="#151617" />
+            <SolidColorBrush x:Key="DockThemeControlBackgroundBrush" Color="#1B1C1E" />
+            <SolidColorBrush x:Key="DockThemeForegroundBrush" Color="#E3E6EB" />
+            <SolidColorBrush x:Key="DockThemeBorderLowBrush" Color="#2B2D31" />
+            <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#2B2D31" />
+            <SolidColorBrush x:Key="DockBorderStrongBrush" Color="#2B2D31" />
+            <SolidColorBrush x:Key="DockSeparatorBrush" Color="#2B2D31" />
+            <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#151617" />
+            <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#1B1C1E" />
+            <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#1B1C1E" />
+            <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#1B1C1E" />
+            <!-- Dock paints a selected-but-unfocused document tab with the header brush. -->
+            <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#232529" />
+            <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#151617" />
+            <SolidColorBrush x:Key="DockTabBackgroundBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="DockTabHoverBackgroundBrush" Color="#1E2023" />
+            <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#232529" />
+            <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#3D82CF" />
+            <SolidColorBrush x:Key="DockTabForegroundBrush" Color="#9299A4" />
+            <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="DockTabSelectedForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="DockTabCloseHoverBackgroundBrush" Color="#34383E" />
+            <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#151617" />
+            <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="DockDocumentTabPointerOverForegroundBrush" Color="#C5C9D0" />
+            <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#2B2D31" />
+            <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="#151617" />
+            <SolidColorBrush x:Key="DockSplitterHoverBrush" Color="#3D82CF" />
+            <SolidColorBrush x:Key="DockSplitterDragBrush" Color="#3D82CF" />
+            <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6,6,0,0</CornerRadius>
+            <Thickness x:Key="DockDocumentTabItemPadding">12,0</Thickness>
+            <Thickness x:Key="DockDocumentTabItemMargin">0,4,2,0</Thickness>
         </ResourceDictionary>
     </Application.Resources>
 
@@ -32,6 +70,20 @@
         </Style>
         <Style Selector="ToolChromeControl /template/ Grid#PART_Grid">
             <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <!-- Panel title strips (Explorer, Property, Pinned) match the document tab strip. -->
+        <Style Selector="ToolChromeControl /template/ Grid#PART_Grip">
+            <Setter Property="Background" Value="{DynamicResource DockDocumentTabStripBackgroundBrush}" />
+            <Setter Property="MinHeight" Value="29" />
+        </Style>
+        <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
+            <Setter Property="Margin" Value="5,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#AAB0B8" />
+        </Style>
+        <Style Selector="ToolChromeControl:active /template/ TextBlock#PART_Title">
+            <Setter Property="Foreground" Value="White" />
         </Style>
     </Application.Styles>
 </Application>

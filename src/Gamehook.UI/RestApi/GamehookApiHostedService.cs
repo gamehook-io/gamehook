@@ -1,5 +1,4 @@
 using Gamehook.Domain;
-using Gamehook.Domain.Models;
 using Gamehook.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

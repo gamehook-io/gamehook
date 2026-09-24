@@ -26,6 +26,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     private readonly FilesystemProvider filesystemProvider;
     private readonly SettingsService settings;
     private readonly RetroArchConfigurationService retroArchConfiguration;
+    private readonly IReadOnlyList<DriverRegistration> driverRegistrations;
     private readonly DockFactory dockFactory;
     private readonly HexViewerToolViewModel hexViewer;
     private Dictionary<string, IProperty>? treeSourceProperties;
@@ -53,6 +54,8 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     private bool isSelected;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyCanExecuteChangedFor(nameof(LoadCommand))]
     private MapperChoice? selectedMapper;
 
     // The driver the router is on (from a load here or over the API). The load screen is prefilled
@@ -62,35 +65,48 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     private bool syncingSelectedDriver;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSaveStateDriver), nameof(IsNetworkDriver), nameof(DriverPortHint), nameof(CanSelectMapper), nameof(ReadingStatusText))]
+    [NotifyCanExecuteChangedFor(nameof(LoadCommand))]
     private DriverChoice? selectedDriver;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSelectMapper))]
+    [NotifyCanExecuteChangedFor(nameof(LoadCommand))]
     private string? selectedSaveStatePath;
 
     // Port for network drivers (RetroArch, SuperShuckie). Prefilled with the port last used for
     // the selected driver, else its default; cleared means "use the default".
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(LoadCommand))]
     private decimal? driverPort;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError), nameof(IsConnected), nameof(IsLoadScreenVisible), nameof(IsWorkspaceVisible),
+        nameof(IsReadOnDemandBannerVisible), nameof(ReadingStatusText))]
     private string status = "Choose a driver and mapper to load.";
 
     // True from the moment Load is clicked until the first read against the new mapper either
     // succeeds or fails - the workspace only has something real to show once that first read
     // lands, so it stays hidden behind a spinner rather than flashing an empty tree.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TabTitle), nameof(IsLoadScreenVisible), nameof(IsWorkspaceVisible), nameof(IsReadOnDemandBannerVisible))]
     private bool isConnecting;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConnected), nameof(IsLoadScreenVisible), nameof(IsWorkspaceVisible), nameof(IsReadOnDemandBannerVisible),
+        nameof(ReadingStatusText), nameof(WindowTitle), nameof(TabTitle))]
+    [NotifyCanExecuteChangedFor(nameof(ReloadCommand), nameof(ReadNowCommand))]
     private IMapper? mapper;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(HasSelectedProperty))]
     private PropertyTreeNodeViewModel? selectedNode;
 
     [ObservableProperty]
     private string? selectedRegionId;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
     private IReadOnlyList<SelectionParseViewModel>? selectionParses;
 
     [ObservableProperty]
@@ -100,6 +116,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     // some property needs (e.g. RetroArch has no memory map for it). Those properties read as null
     // rather than failing the whole connection - this just surfaces that so it isn't silently confusing.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDataWarning))]
     private string? dataWarning;
 
     // Synced from Mapper.ConnectionWarning on every tick (unlike DataWarning, which is only
@@ -112,6 +129,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     // workspace stays usable but shows the values from the last read, and a banner offers "Read"
     // (ReadNowCommand) - an API ?read=true read updates it too. Writes stay refused (GamehookRouter).
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsReadOnDemandBannerVisible))]
     private bool isContinuousReadEnabled;
 
     [ObservableProperty]
@@ -119,8 +137,6 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     private bool isReadingNow;
 
     public bool IsReadOnDemandBannerVisible => IsWorkspaceVisible && !IsContinuousReadEnabled;
-
-    partial void OnIsContinuousReadEnabledChanged(bool value) => OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
 
     private bool CanReadNow() => Mapper is not null && !IsReadingNow;
 
@@ -155,7 +171,6 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     public ObservableCollection<string> RegionIds { get; } = [];
     public PropertiesToolViewModel PropertiesPanel { get; }
     public WorkspaceToolViewModel WorkspacePanel { get; }
-    public HexViewerToolViewModel HexViewerPanel => hexViewer;
     public PropertyToolViewModel PropertyPanel { get; private set; } = null!;
     public PinnedToolViewModel PinnedPanel { get; }
 
@@ -187,8 +202,6 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     // consumer from displaying both inspectors while a selection changes between panels.
     public bool HasSelection => !HasSelectedProperty && SelectionParses is { Count: > 0 };
     public bool HasSelectedProperty => SelectedNode?.Property is not null;
-    public bool IsPropertyPanelEmpty => !HasSelection && !HasSelectedProperty;
-    public bool IsLoaded => Mapper is not null;
     public bool HasError => Status.StartsWith("Error:", StringComparison.Ordinal);
     public bool IsConnected => Mapper is not null && !HasError;
     public bool IsLoadScreenVisible => !IsConnected && !IsConnecting;
@@ -201,15 +214,9 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     private int? EffectiveDriverPort => IsNetworkDriver ? (int?)DriverPort ?? SelectedDriver!.DefaultPort : null;
     public bool CanSelectMapper => SelectedDriver is not null
         && (!IsSaveStateDriver || SelectedSaveStatePath is not null);
-    public bool IsIdle => Mapper is null && !HasError;
     public bool HasPinnedProperties => Pinned.Count > 0;
     public bool HasDataWarning => DataWarning is not null;
-    public bool HasConnectionWarning => ConnectionWarning is not null;
     internal RawByteSelection? RawSelection => rawByteSelection;
-    public string WorkspaceName => SelectedMapper is null
-        ? "No workspace loaded"
-        : Path.GetFileNameWithoutExtension(SelectedMapper.FullPath).Replace('_', ' ');
-    public bool HasReadingStatus => IsConnected;
     public IBrush FooterStatusBrush => Mapper?.ConsecutiveReadFailures switch
     {
         _ when Mapper?.HasConnectionRefusal is true => ErrorStatusBrush,
@@ -229,31 +236,36 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     public string FooterDriverTime => FormatReadTime(Mapper?.LastReadMetrics.Driver);
     public string FooterPropertyTranslationTime => FormatReadTime(Mapper?.LastReadMetrics.PropertyTranslation);
     public string FooterInlineCalculationsTime => FormatReadTime(Mapper?.LastReadMetrics.InlineCalculations);
-    public string FooterPostprocessorTime => FormatReadTime(Mapper?.LastReadMetrics.Postprocessor);
+    public string FooterProcessorsTime => FormatReadTime(Mapper?.LastReadMetrics.Processors);
     public string FooterTotalTime => FormatReadTime(Mapper?.LastReadMetrics.Total);
     public bool HasFooterConnectionDetails => !string.IsNullOrEmpty(FooterConnectionDetails);
-    public string FooterConnectionDetails => Mapper?.ConsecutiveReadFailures switch
+    public string FooterConnectionDetails
     {
-        0 or null => string.Empty,
-        _ when Mapper.HasConnectionRefusal =>
-            $"RetroArch rejected connection\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
-            $"Check RetroArch is running and Network Commands are enabled.\nLast error: {Mapper.LastReadFailureMessage}",
-        >= 5 =>
-            $"RetroArch not responding\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
-            $"Showing last successful values. Check RetroArch and Network Commands.\nLast error: {Mapper.LastReadFailureMessage}",
-        _ =>
-            $"RetroArch read delayed\nFailed reads in a row: {Mapper.ConsecutiveReadFailures}\n" +
-            $"Showing last successful values. Last error: {Mapper.LastReadFailureMessage}",
-    };
+        get
+        {
+            if (Mapper is not { ConsecutiveReadFailures: > 0 and var failures } activeMapper) return string.Empty;
+
+            var driver = router.DriverName ?? "Driver";
+            var check = driver == RetroArchDriver.Name
+                ? $"Check {driver} is running and Network Commands are enabled."
+                : $"Check {driver} is running.";
+            var (headline, advice) = activeMapper.HasConnectionRefusal ? ($"{driver} rejected connection", check)
+                : failures >= 5 ? ($"{driver} not responding", $"Showing last successful values. {check}")
+                : ($"{driver} read delayed", "Showing last successful values.");
+            return $"{headline}\nFailed reads in a row: {failures}\n{advice}\nLast error: {activeMapper.LastReadFailureMessage}";
+        }
+    }
 
     private static string FormatReadTime(TimeSpan? elapsed) => $"{elapsed?.TotalMilliseconds ?? 0:0.00} ms";
 
-    private void OnFooterMetricsChanged()
+    // Footer values come from the mapper's last read, so they change on every session tick.
+    private void RefreshFooter()
     {
+        OnPropertyChanged(nameof(FooterStatusBrush));
         OnPropertyChanged(nameof(FooterDriverTime));
         OnPropertyChanged(nameof(FooterPropertyTranslationTime));
         OnPropertyChanged(nameof(FooterInlineCalculationsTime));
-        OnPropertyChanged(nameof(FooterPostprocessorTime));
+        OnPropertyChanged(nameof(FooterProcessorsTime));
         OnPropertyChanged(nameof(FooterTotalTime));
         OnPropertyChanged(nameof(HasFooterConnectionDetails));
         OnPropertyChanged(nameof(FooterConnectionDetails));
@@ -271,6 +283,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         this.filesystemProvider = filesystemProvider;
         this.retroArchConfiguration = retroArchConfiguration;
         this.settings = settings;
+        this.driverRegistrations = driverRegistrations.ToArray();
         isContinuousReadEnabled = session.IsContinuousReadEnabled;
         session.Changed += OnSessionChanged;
         session.ContinuousReadChanged += OnContinuousReadChanged;
@@ -293,9 +306,9 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
             Status = $"Error: Could not read the mapper directory. {ex.Message}";
         }
 
-        foreach (var registration in driverRegistrations.OrderBy(r => r.Name, StringComparer.Ordinal))
+        foreach (var registration in this.driverRegistrations.OrderBy(r => r.Name, StringComparer.Ordinal))
         {
-            Drivers.Add(new DriverChoice(registration.Name, registration.Name, registration.DefaultPort));
+            Drivers.Add(new DriverChoice(registration.Name, registration.DefaultPort));
         }
 
         if (filesystemProvider.GetLastMapperPath() is { } lastMapperPath)
@@ -308,11 +321,11 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
             SelectedDriver = Drivers.FirstOrDefault(d => string.Equals(d.Name, lastDriver, StringComparison.Ordinal));
         }
 
-        var properties = CreateLockedTool(new PropertiesToolViewModel(this));
-        var workspace = CreateLockedDocument(new WorkspaceToolViewModel(this));
-        hexViewer = CreateLockedDocument(new HexViewerToolViewModel(this));
-        var property = CreateLockedTool(new PropertyToolViewModel(this));
-        var pinned = CreateLockedTool(new PinnedToolViewModel(this));
+        var properties = Lock(new PropertiesToolViewModel(this));
+        var workspace = Lock(new WorkspaceToolViewModel(this));
+        hexViewer = Lock(new HexViewerToolViewModel(this));
+        var property = Lock(new PropertyToolViewModel(this));
+        var pinned = Lock(new PinnedToolViewModel(this));
         PropertiesPanel = properties;
         WorkspacePanel = workspace;
         PropertyPanel = property;
@@ -476,22 +489,8 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private int? ParsePort((string Name, string? Source) driver)
-    {
-        if (Drivers.FirstOrDefault(d => string.Equals(d.Name, driver.Name, StringComparison.OrdinalIgnoreCase))?.DefaultPort is not { } defaultPort)
-        {
-            return null;
-        }
-
-        try
-        {
-            return NetworkEndpoint.Parse(driver.Source, defaultPort, driver.Name).Port;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-    }
+    private int? ParsePort((string Name, string? Source) driver) =>
+        DriverResources.GetPort(driverRegistrations, driver.Name, driver.Source);
 
     private bool CanRefresh() => Mapper is not null;
 
@@ -539,8 +538,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
 
         // With continuous read mode off, Changed only fires for on-demand reads (Read, or an API
         // ?read=true), so the tree below always shows the latest read either way.
-        OnPropertyChanged(nameof(FooterStatusBrush));
-        OnFooterMetricsChanged();
+        RefreshFooter();
 
         if (session.Mapper is not { } activeMapper)
         {
@@ -586,15 +584,21 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ToggleContinuousRead() => settings.Update(!session.IsContinuousReadEnabled);
 
-    private void RebuildTree(IMapper activeMapper)
+    private void ResetTree()
     {
         foreach (var leaf in treeLeaves) leaf.PinnedChanged -= OnNodePinnedChanged;
+        treeLeaves.Clear();
+        propertySearchIndex.Clear();
         Tree.Clear();
         Pinned.Clear();
         PinnedProperties.Clear();
-        treeLeaves.Clear();
-        propertySearchIndex.Clear();
+        OnPropertyChanged(nameof(HasProperties));
         OnPropertyChanged(nameof(HasPinnedProperties));
+    }
+
+    private void RebuildTree(IMapper activeMapper)
+    {
+        ResetTree();
         foreach (var node in PropertyTreeNodeViewModel.Build(activeMapper.Properties.Values))
         {
             Tree.Add(node);
@@ -714,7 +718,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
 
     private void SyncHexRegions()
     {
-        var regions = HexViewerToolViewModel.GetRegions(Mapper);
+        var regions = router.RegionIds;
         if (RegionIds.SequenceEqual(regions, StringComparer.Ordinal))
         {
             return;
@@ -740,26 +744,17 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PropertyPanel));
     }
 
-    private static T CreateLockedTool<T>(T tool) where T : Tool
+    // Panels are fixed in place: no closing, pinning, dragging, or re-docking. Only the Property
+    // inspector may float (DockFactory turns it into a snapshot window).
+    internal static T Lock<T>(T dockable, bool canFloat = false) where T : IDockable
     {
-        tool.CanClose = false;
-        tool.CanPin = false;
-        tool.CanFloat = false;
-        tool.CanDockAsDocument = false;
-        tool.CanDrag = false;
-        tool.CanDrop = false;
-        return tool;
-    }
-
-    private static T CreateLockedDocument<T>(T document) where T : Document
-    {
-        document.CanClose = false;
-        document.CanPin = false;
-        document.CanFloat = false;
-        document.CanDockAsDocument = false;
-        document.CanDrag = false;
-        document.CanDrop = false;
-        return document;
+        dockable.CanClose = false;
+        dockable.CanPin = false;
+        dockable.CanFloat = canFloat;
+        dockable.CanDockAsDocument = false;
+        dockable.CanDrag = false;
+        dockable.CanDrop = false;
+        return dockable;
     }
 
     // Clicking a watched row in the Pinned panel jumps the Property panel and hex viewer
@@ -825,39 +820,17 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedMapperChanged(MapperChoice? value)
     {
-        LoadCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(WorkspaceName));
-        OnPropertyChanged(nameof(WindowTitle));
-        OnPropertyChanged(nameof(ReadingStatusText));
-        OnPropertyChanged(nameof(HasReadingStatus));
-        OnFooterMetricsChanged();
-
         if (value is not null)
         {
             filesystemProvider.RememberLastMapperPath(value.FullPath);
         }
     }
 
-    partial void OnSelectedSaveStatePathChanged(string? value)
-    {
-        OnPropertyChanged(nameof(CanSelectMapper));
-        LoadCommand.NotifyCanExecuteChanged();
-    }
-
-    partial void OnDriverPortChanged(decimal? value) => LoadCommand.NotifyCanExecuteChanged();
-
     partial void OnSelectedDriverChanged(DriverChoice? value)
     {
         DriverPort = value?.DefaultPort is { } defaultPort
             ? filesystemProvider.GetLastDriverPort(value.Name) ?? defaultPort
             : null;
-        OnPropertyChanged(nameof(IsSaveStateDriver));
-        OnPropertyChanged(nameof(IsNetworkDriver));
-        OnPropertyChanged(nameof(DriverPortHint));
-        OnPropertyChanged(nameof(CanSelectMapper));
-        OnPropertyChanged(nameof(ReadingStatusText));
-        OnPropertyChanged(nameof(HasReadingStatus));
-        LoadCommand.NotifyCanExecuteChanged();
 
         // Only the user's own picks are remembered as the default for new tabs.
         if (value is not null && !syncingSelectedDriver)
@@ -866,62 +839,11 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         }
     }
 
-    partial void OnMapperChanged(IMapper? value)
-    {
-        ReloadCommand.NotifyCanExecuteChanged();
-        ReadNowCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(IsLoaded));
-        OnPropertyChanged(nameof(IsConnected));
-        OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(IsLoadScreenVisible));
-        OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
-        OnPropertyChanged(nameof(ReadingStatusText));
-        OnPropertyChanged(nameof(HasReadingStatus));
-        OnFooterMetricsChanged();
-        OnPropertyChanged(nameof(WindowTitle));
-        OnPropertyChanged(nameof(TabTitle));
-    }
-
-    partial void OnIsConnectingChanged(bool value)
-    {
-        OnPropertyChanged(nameof(TabTitle));
-        OnPropertyChanged(nameof(IsLoadScreenVisible));
-        OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
-    }
-
-    partial void OnDataWarningChanged(string? value) => OnPropertyChanged(nameof(HasDataWarning));
-
-    partial void OnConnectionWarningChanged(string? value)
-    {
-        OnPropertyChanged(nameof(HasConnectionWarning));
-        OnPropertyChanged(nameof(FooterStatusBrush));
-        OnFooterMetricsChanged();
-    }
-
-    partial void OnStatusChanged(string value)
-    {
-        OnPropertyChanged(nameof(HasError));
-        OnPropertyChanged(nameof(IsConnected));
-        OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(IsLoadScreenVisible));
-        OnPropertyChanged(nameof(IsWorkspaceVisible));
-        OnPropertyChanged(nameof(IsReadOnDemandBannerVisible));
-        OnPropertyChanged(nameof(ReadingStatusText));
-        OnPropertyChanged(nameof(HasReadingStatus));
-        OnFooterMetricsChanged();
-    }
-
     // Called by the hex viewer when a byte is clicked. Expanding its path makes the
     // selected leaf visible before the tree scrolls it into view.
     public PropertyTreeNodeViewModel? SelectProperty(IProperty property)
     {
-        rawByteSelection = null;
-        SelectionAddressRange = null;
-        SelectionParses = null;
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(IsPropertyPanelEmpty));
+        ClearRawSelection();
         var node = FindNode(Tree, property);
         SelectedNode = node ?? SelectedNode;
         if (node is not null)
@@ -943,8 +865,6 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         SelectionAddressRange = FormatAddressRange(startingAddress, bytes.Length);
         rawByteSelection = new RawByteSelection(regionId, startingAddress, bytes, InspectBytes(activeMapper, bytes));
         SelectionParses = rawByteSelection.Parses;
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(IsPropertyPanelEmpty));
         RawSelectionUpdated?.Invoke(rawByteSelection);
     }
 
@@ -966,12 +886,9 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         var updated = selection with { Bytes = selectedBytes, Parses = InspectBytes(Mapper!, selectedBytes) };
         rawByteSelection = updated;
         SelectionParses = updated.Parses;
-        OnPropertyChanged(nameof(HasSelection));
         RawSelectionUpdated?.Invoke(updated);
     }
 
-    public IDriver? HexDriver => session.HexDriver;
-    public GameSystem? HexSystem => Mapper?.System;
 
     partial void OnSelectedRegionIdChanged(string? value)
     {
@@ -986,17 +903,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     {
         // Raw-byte parser results and a mapped property describe different selections. Clear all
         // raw-selection state, not only parses, so every inspector sees one selection type.
-        if (value?.Property is not null &&
-            (rawByteSelection is not null || SelectionAddressRange is not null || SelectionParses is not null))
-        {
-            rawByteSelection = null;
-            SelectionAddressRange = null;
-            SelectionParses = null;
-            OnPropertyChanged(nameof(HasSelection));
-        }
-
-        OnPropertyChanged(nameof(HasSelectedProperty));
-        OnPropertyChanged(nameof(IsPropertyPanelEmpty));
+        if (value?.Property is not null) ClearRawSelection();
 
         if (value?.Property?.BuildRequest() is { } request && RegionIds.Contains(request.RegionId))
         {
@@ -1004,6 +911,13 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         }
 
         ScrollHexToSelectionRequested?.Invoke();
+    }
+
+    private void ClearRawSelection()
+    {
+        rawByteSelection = null;
+        SelectionAddressRange = null;
+        SelectionParses = null;
     }
 
     private static PropertyTreeNodeViewModel? FindNode(IEnumerable<PropertyTreeNodeViewModel> nodes, IProperty property)
@@ -1031,27 +945,15 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
         explorerSearchCancellation?.Cancel();
         explorerSearchVersion++;
         hexViewer.Clear();
-        foreach (var leaf in treeLeaves) leaf.PinnedChanged -= OnNodePinnedChanged;
+        ResetTree();
         treeSourceProperties = null;
         SelectedNode = null;
         SelectedRegionId = null;
-        rawByteSelection = null;
-        SelectionAddressRange = null;
-        SelectionParses = null;
+        ClearRawSelection();
         DataWarning = null;
         ConnectionWarning = null;
-        Tree.Clear();
         ReplaceSearchTree([]);
-        propertySearchIndex.Clear();
-        Pinned.Clear();
-        PinnedProperties.Clear();
-        treeLeaves.Clear();
         RegionIds.Clear();
-        OnPropertyChanged(nameof(HasProperties));
-        OnPropertyChanged(nameof(HasPinnedProperties));
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(HasSelectedProperty));
-        OnPropertyChanged(nameof(IsPropertyPanelEmpty));
     }
 
     public void Dispose()
@@ -1071,9 +973,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     {
         null => "null",
         bool[] bits => string.Join(" ", bits.Select(bit => bit ? '1' : '0')),
-        byte[] bytes => Convert.ToHexString(bytes),
-        IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
-        _ => value.ToString() ?? "",
+        _ => ValueFormatter.Format(value),
     };
 
     private static IReadOnlyList<SelectionParseViewModel> InspectBytes(IMapper mapper, ReadOnlyMemory<byte> bytes) =>
@@ -1088,7 +988,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     }
 }
 
-public sealed record DriverChoice(string Name, string DisplayName, int? DefaultPort = null);
+public sealed record DriverChoice(string Name, int? DefaultPort = null);
 
 public sealed record MapperChoice(string FullPath, string DisplayName, bool IsCustom = false);
 

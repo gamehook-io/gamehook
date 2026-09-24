@@ -1,6 +1,5 @@
 using Gamehook.Domain;
 using Gamehook.Domain.Interface;
-using Gamehook.Domain.Models;
 using Gamehook.Infrastructure.AppUpdate;
 using Gamehook.Infrastructure.MapperUpdate;
 using Microsoft.Extensions.Configuration;
@@ -22,27 +21,17 @@ public static class DependencyInjection
         services.AddSingleton<FilesystemProvider>();
         services.AddSingleton<Drivers.RetroArchConfigurationService>();
         services.AddGamehookLogging(configuration);
-        services.AddSingleton<DriverRegistration>(new DriverRegistration(
-            Drivers.RetroArchDriver.Name,
-            (provider, sourcePath) => new Drivers.RetroArchDriver(sourcePath),
-            Drivers.RetroArchDriver.DefaultPort));
-        services.AddSingleton<DriverRegistration>(new DriverRegistration(
-            Drivers.SuperShuckieDriver.Name,
-            (provider, sourcePath) => new Drivers.SuperShuckieDriver(sourcePath),
-            Drivers.SuperShuckieDriver.DefaultPort));
-        services.AddSingleton<DriverRegistration>(new DriverRegistration(
-            Drivers.SaveStateDriver.Name,
-            (provider, sourcePath) =>
-            {
-                if (string.IsNullOrWhiteSpace(sourcePath))
-                {
-                    throw new ArgumentException($"State file path is required for {Drivers.SaveStateDriver.Name} driver.", nameof(sourcePath));
-                }
-                return ActivatorUtilities.CreateInstance<Drivers.SaveStateDriver>(provider, sourcePath);
-            }));
+        services.AddSingleton(new DriverRegistration(
+            Drivers.RetroArchDriver.Name, source => new Drivers.RetroArchDriver(source), Drivers.RetroArchDriver.DefaultPort));
+        services.AddSingleton(new DriverRegistration(
+            Drivers.SuperShuckieDriver.Name, source => new Drivers.SuperShuckieDriver(source), Drivers.SuperShuckieDriver.DefaultPort));
+        services.AddSingleton(new DriverRegistration(Drivers.SaveStateDriver.Name, source =>
+            new Drivers.SaveStateDriver(string.IsNullOrWhiteSpace(source)
+                ? throw new ArgumentException($"State file path is required for {Drivers.SaveStateDriver.Name} driver.", nameof(source))
+                : source)));
         services.TryAddSingleton<IDriverFactory, DriverFactory>();
         services.TryAddSingleton<IMapperFactory, MapperFactory>();
-        // Singleton: the REST API (Gamehook.RestApi) and the Avalonia UI must observe the same set of
+        // Singleton: the REST API and the Avalonia UI must observe the same set of
         // instances. Each instance gets its own GamehookSession (own mapper, driver, poll loop).
         // No two instances may share a driver endpoint; DriverResources says what each driver uses.
         services.TryAddSingleton(provider =>
@@ -51,11 +40,9 @@ public static class DependencyInjection
             return new GamehookInstances(
                 () => new GamehookSession(
                     provider.GetRequiredService<IMapperFactory>(),
-                    provider.GetRequiredService<IDriverFactory>(),
                     provider.GetService<ILogger<GamehookSession>>()),
                 (driverName, sourcePath) => DriverResources.Identify(registrations, driverName, sourcePath));
         });
-        services.TryAddSingleton<ApiBindStatus>();
         services.TryAddSingleton(provider => SettingsService.Create(
             provider.GetRequiredService<GamehookInstances>(),
             configuration,
@@ -84,24 +71,10 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             client.Timeout = TimeSpan.FromSeconds(20);
         });
-        services.AddSingleton<MapperUpdateStatusProvider>();
         services.AddSingleton<MapperUpdateService>();
         services.AddHostedService(provider => provider.GetRequiredService<MapperUpdateService>());
 #endif
 
-        return services;
-    }
-
-    public static IServiceCollection AddGamehookDriver<TDriver>(
-        this IServiceCollection services,
-        string name,
-        Func<IServiceProvider, string?, TDriver> factory,
-        int? defaultPort = null)
-        where TDriver : class, IDriver
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(factory);
-        services.AddSingleton(new DriverRegistration(name, (provider, sourcePath) => factory(provider, sourcePath), defaultPort));
         return services;
     }
 
@@ -110,20 +83,21 @@ public static class DependencyInjection
     // the UI/console entry points) gets a real logger via plain DI without depending on Serilog directly.
     private static IServiceCollection AddGamehookLogging(this IServiceCollection services, IConfiguration configuration)
     {
+        const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}";
         var logDirectory = FilesystemProvider.GetLogDirectory();
         var serilogLogger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .ReadFrom.Configuration(configuration)
             .Enrich.FromLogContext()
             .WriteTo.Console(
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+                outputTemplate: outputTemplate)
             .WriteTo.File(
                 Path.Combine(logDirectory, "gamehook-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 3,
                 fileSizeLimitBytes: 10 * 1024 * 1024,
                 rollOnFileSizeLimit: true,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+                outputTemplate: outputTemplate)
             .CreateLogger();
 
         services.AddLogging(logging =>

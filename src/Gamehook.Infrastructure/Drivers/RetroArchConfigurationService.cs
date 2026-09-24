@@ -1,5 +1,4 @@
 using System.Net.Sockets;
-using System.Text;
 
 namespace Gamehook.Infrastructure.Drivers;
 
@@ -51,16 +50,7 @@ public sealed class RetroArchConfigurationService
 
         if (!updated) lines.Add(replacement);
 
-        var temporaryPath = fullPath + $".{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.WriteAllLines(temporaryPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Move(temporaryPath, fullPath, overwrite: true);
-        }
-        finally
-        {
-            File.Delete(temporaryPath);
-        }
+        AtomicFile.WriteAllText(fullPath, string.Concat(lines.Select(line => line + Environment.NewLine)));
     }
 
     private static IEnumerable<string> CandidateConfigurationFiles()

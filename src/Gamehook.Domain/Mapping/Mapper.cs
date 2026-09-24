@@ -1,21 +1,23 @@
-using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Net.Sockets;
-using System.Xml.Linq;
-using Gamehook.Domain;
 using Gamehook.Domain.Interface;
 using Gamehook.Domain.Models;
 using Gamehook.Domain.NativeProcessors;
-using Gamehook.Domain.Property;
 using Jint;
 using Jint.Native;
 using Jint.Native.Object;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Gamehook.Infrastructure;
+namespace Gamehook.Domain.Mapping;
 
+// Inside the namespace so `Property` means the class, not the sibling Gamehook.Domain.Property namespace.
+using Gamehook.Domain.Property;
+
+// A loaded mapper running against a driver: the read cycle (driver read -> pre-processors ->
+// property decode -> expressions -> post-processors), property and raw writes, and the bridge
+// that mapper scripts call into. Built from a MapperDefinition; reading mapper files is
+// Infrastructure's job (MapperCompiler.Load).
 public class Mapper : IMapper, INativeProcessorHost, IDisposable
 {
     private static readonly (string Type, string Label)[] InspectionTypes =
@@ -48,13 +50,13 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     // reference the engine at all. Mapper reads each property's decoded value, runs it through
     // script where applicable, and writes results back via Property's public mutation methods
     // (SetValueOverride/SetAddress/...).
-    private readonly ExpressionEngine scriptEngine = new();
+    private readonly ExpressionEngine scriptEngine;
     private readonly ScriptMemoryAccess memoryAccess;
     private readonly bool hasMapperScript;
     private readonly Dictionary<string, VirtualMemoryRegion> virtualMemoryRegions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ReadOnlyMemory<byte>> containerSnapshot = new(StringComparer.Ordinal);
 
-    private readonly (Property Property, CompiledExpression Expression)[] expressionBindings;
+    private readonly (Property Property, Func<double, double> Expression)[] expressionBindings;
     private readonly (Property Property, DeferredAddress Address)[] dynamicAddressProperties;
 
     // Distinct script-set variables the deferred addresses read, resolved once per read into
@@ -64,7 +66,8 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     private readonly ulong?[] runtimeTokenValues;
     private TimeSpan lastPropertyTranslation;
     private TimeSpan lastInlineCalculations;
-    private TimeSpan lastPostprocessor;
+    // Native + script pre- and postprocessors together.
+    private TimeSpan lastProcessors;
 
     private readonly Property[] compiledProperties;
     private readonly Dictionary<string, Property> propertiesByPath;
@@ -143,37 +146,28 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         }
     }
 
-    public Mapper(string mapperPath, IDriver driver, ILogger<Mapper>? logger = null)
+    public Mapper(MapperDefinition definition, IDriver driver, ILogger<Mapper>? logger = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(mapperPath);
+        ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(driver);
         this.logger = logger ?? NullLogger<Mapper>.Instance;
-
-        MapperPath = Path.GetFullPath(mapperPath);
-        var document = XDocument.Load(MapperPath, LoadOptions.None);
-        var root = document.Root ?? throw new InvalidDataException("Mapper has no root element.");
-        if (root.Name.LocalName != "mapper")
-        {
-            throw new InvalidDataException("Mapper root element must be 'mapper'.");
-        }
-
-        system = GameSystem.All.SingleOrDefault(x => x.Id == (string?)root.Attribute("platform"))
-            ?? throw new NotSupportedException($"Unsupported mapper platform '{(string?)root.Attribute("platform")}'.");
-        Id = (string?)root.Attribute("id");
-        GameName = (string?)root.Attribute("name") ?? Path.GetFileNameWithoutExtension(MapperPath).Replace('_', ' ');
-        NativeProcessorId = (string?)root.Attribute("nativeProcessor");
         this.driver = driver;
-        memoryAccess = new ScriptMemoryAccess(system);
 
-        var compiled = MapperCompiler.Compile(root, system, scriptEngine);
-        references = compiled.References;
-        requests = compiled.Requests;
-        compiledProperties = compiled.CompiledProperties.ToArray();
+        MapperPath = definition.MapperPath;
+        Id = definition.Id;
+        GameName = definition.GameName;
+        NativeProcessorId = definition.NativeProcessorId;
+        system = definition.System;
+        scriptEngine = definition.ScriptEngine;
+        memoryAccess = new ScriptMemoryAccess(system);
+        references = definition.References;
+        requests = definition.Requests;
+        compiledProperties = definition.Properties.ToArray();
         requestsMemory = requests.Any(request => request.Length > 0);
-        dynamicAddressProperties = compiled.DynamicAddressProperties.ToArray();
-        runtimeTokenNames = compiled.RuntimeTokenNames.ToArray();
+        dynamicAddressProperties = definition.DynamicAddressProperties.ToArray();
+        runtimeTokenNames = definition.RuntimeTokenNames.ToArray();
         runtimeTokenValues = new ulong?[runtimeTokenNames.Length];
-        expressionBindings = compiled.ExpressionBindings.ToArray();
+        expressionBindings = definition.ExpressionBindings.ToArray();
 
         propertiesByPath = compiledProperties.ToDictionary(p => p.Name, p => p, StringComparer.Ordinal);
         copyBindingsByDestinationPath = BuildCopyBindings(compiledProperties);
@@ -202,27 +196,18 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             Properties[property.Name] = property;
         }
 
-        var scriptPath = Path.ChangeExtension(MapperPath, ".js");
-        hasMapperScript = File.Exists(scriptPath);
-        if (!hasMapperScript && dynamicAddressProperties.Length > 0)
-        {
-            var (property, deferred) = dynamicAddressProperties[0];
-            throw new InvalidDataException(
-                $"Mapper '{MapperFileName}' requires script '{Path.GetFileName(scriptPath)}' " +
-                $"to resolve address '{deferred.Source}' for property '{property.Name}', but the script file is missing. " +
-                "Place the matching .js file beside the mapper XML.");
-        }
+        hasMapperScript = definition.ScriptSource is not null;
         if (scriptEngine.IsScriptInitialized || hasMapperScript) BindScriptHost();
-        if (hasMapperScript)
+        if (definition.ScriptSource is { } scriptSource)
         {
             try
             {
-                scriptEngine.LoadScript(File.ReadAllText(scriptPath));
+                scriptEngine.LoadScript(scriptSource);
                 ReplaceScriptCopyProperties();
             }
             catch (JintException ex)
             {
-                throw new InvalidDataException($"Mapper script '{Path.GetFileName(scriptPath)}' failed to load: {ex.Message}", ex);
+                throw new InvalidDataException($"Mapper script '{Path.ChangeExtension(MapperFileName, ".js")}' failed to load: {ex.Message}", ex);
             }
         }
     }
@@ -265,8 +250,6 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
     }
 
     public IEnumerable<string> PropertyNames => propertiesByPath.Keys;
-
-    public object? GetPropertyValue(string path) => GetProperty(path).Value;
 
     public ReadOnlyMemory<byte> GetPropertyBytes(string path) => GetProperty(path).Bytes;
 
@@ -330,6 +313,7 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             }
             function __run_postprocessor() {
                 if (typeof postprocessor === 'function') postprocessor();
+                return 1;
             }
             const variables = __variables;
             const memory = __memory;
@@ -502,15 +486,15 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             Refresh(response);
             lastResponse = response;
         }
-        LastReadMetrics = new ReadMetrics(driverElapsed, lastPropertyTranslation, lastInlineCalculations, lastPostprocessor, totalTimer.Elapsed);
+        LastReadMetrics = new ReadMetrics(driverElapsed, lastPropertyTranslation, lastInlineCalculations, lastProcessors, totalTimer.Elapsed);
         this.logger.LogDebug(
-            "Read mapper {Mapper} in {TotalMilliseconds:0.00} ms; driver {DriverMilliseconds:0.00} ms, translation {TranslationMilliseconds:0.00} ms, inline {InlineMilliseconds:0.00} ms, postprocessor {PostprocessorMilliseconds:0.00} ms",
+            "Read mapper {Mapper} in {TotalMilliseconds:0.00} ms; driver {DriverMilliseconds:0.00} ms, translation {TranslationMilliseconds:0.00} ms, inline {InlineMilliseconds:0.00} ms, processors {ProcessorsMilliseconds:0.00} ms",
             MapperFileName,
             LastReadMetrics.Total.TotalMilliseconds,
             LastReadMetrics.Driver.TotalMilliseconds,
             LastReadMetrics.PropertyTranslation.TotalMilliseconds,
             LastReadMetrics.InlineCalculations.TotalMilliseconds,
-            LastReadMetrics.Postprocessor.TotalMilliseconds);
+            LastReadMetrics.Processors.TotalMilliseconds);
         return true;
     }
 
@@ -561,20 +545,48 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         }
     }
 
-    // Raw byte poke (hex editor), bypassing property encoding entirely - the caller already knows
-    // exactly which bytes it wants written. Still goes through writeGate/writeShadow so it composes
-    // safely with concurrent property writes to overlapping bytes.
+    // Raw byte poke (hex editor, inspector raw bytes, REST), bypassing property encoding entirely -
+    // the caller already knows exactly which bytes it wants written. Still goes through
+    // writeGate/writeShadow so it composes safely with concurrent property writes to overlapping bytes.
     public async Task<(bool Success, string? Error)> WriteRawBytesAsync(string regionId, ulong startingAddress, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await WriteBytesToDevice(regionId, startingAddress, bytes, cancellationToken).ConfigureAwait(false);
+            var result = await WriteBytesToDevice(regionId, startingAddress, bytes, cancellationToken).ConfigureAwait(false);
+            if (result.Success) ApplyRawWriteToProperties(regionId, startingAddress, bytes.Span);
+            return result;
         }
         finally
         {
             writeGate.Release();
+        }
+    }
+
+    // A raw write skips property encoding, so patch it into every property whose bytes it overlaps
+    // now - otherwise every host shows the old decoded values until the next read.
+    private void ApplyRawWriteToProperties(string regionId, ulong writeStart, ReadOnlySpan<byte> written)
+    {
+        var writeEnd = writeStart + (ulong)written.Length;
+        foreach (var property in compiledProperties)
+        {
+            try
+            {
+                if (property.BuildRequest() is not { } request || request.RegionId != regionId
+                    || property.Bytes.Length != request.Length) continue;
+                var start = Math.Max(writeStart, request.StartingAddress);
+                var end = Math.Min(writeEnd, request.StartingAddress + (ulong)request.Length);
+                if (start >= end) continue;
+
+                var bytes = property.Bytes.ToArray();
+                written[(int)(start - writeStart)..(int)(end - writeStart)].CopyTo(bytes.AsSpan((int)(start - request.StartingAddress)));
+                property.ApplyWrittenBytes(bytes, references);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or OverflowException)
+            {
+                // Unresolvable address or undecodable bytes: the next read reports this property.
+            }
         }
     }
 
@@ -643,73 +655,28 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             pair.First.StartingAddress == pair.Second.StartingAddress &&
             pair.First.Bytes.Span.SequenceEqual(pair.Second.Bytes.Span));
 
-    public async IAsyncEnumerable<bool> ReadContinuouslyAsync(
-        TimeSpan interval,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        if (interval < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(interval));
-        }
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            yield return await ReadAsync(cancellationToken).ConfigureAwait(false);
-            await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     private void Refresh(IDriver.Response response)
     {
-        ArgumentNullException.ThrowIfNull(response);
         memoryAccess.UpdateSnapshot(response.Segments);
+        lastPropertyTranslation = lastInlineCalculations = TimeSpan.Zero;
 
-        // Guard the stopwatch on hasMapperScript so a mapper with no script at all reports an
-        // exact TimeSpan.Zero rather than stray timer noise.
-        lastPostprocessor = TimeSpan.Zero;
-        var preprocessorContinues = true;
-        if (nativeProcessor is not null)
-        {
-            var nativePreprocessorTimer = Stopwatch.StartNew();
-            preprocessorContinues = RunNativePreprocessor();
-            lastPostprocessor = nativePreprocessorTimer.Elapsed;
-        }
-        if (preprocessorContinues && hasMapperScript)
-        {
-            var preprocessorTimer = Stopwatch.StartNew();
-            preprocessorContinues = RunPreprocessor();
-            lastPostprocessor += preprocessorTimer.Elapsed;
-        }
-        if (!preprocessorContinues)
-        {
-            lastPropertyTranslation = TimeSpan.Zero;
-            lastInlineCalculations = TimeSpan.Zero;
-            return;
-        }
+        var timer = Stopwatch.StartNew();
+        var preprocessorContinues = RunProcessors("preprocessor", processor => processor.Preprocessor(), "__run_preprocessor");
+        lastProcessors = timer.Elapsed;
+        if (!preprocessorContinues) return;
 
-        var translationTimer = Stopwatch.StartNew();
+        timer.Restart();
         ResolveDynamicAddresses();
-        var segments = response.Segments;
-        foreach (var property in compiledProperties) property.Refresh(segments, references, containerSnapshot);
-        lastPropertyTranslation = translationTimer.Elapsed;
+        foreach (var property in compiledProperties) property.Refresh(response.Segments, references, containerSnapshot);
+        lastPropertyTranslation = timer.Elapsed;
 
-        var inlineTimer = Stopwatch.StartNew();
+        timer.Restart();
         ApplyExpressions();
+        lastInlineCalculations = timer.Elapsed;
 
-        lastInlineCalculations = inlineTimer.Elapsed;
-
-        if (nativeProcessor is not null)
-        {
-            var nativePostprocessorTimer = Stopwatch.StartNew();
-            RunNativePostprocessor();
-            lastPostprocessor += nativePostprocessorTimer.Elapsed;
-        }
-        if (hasMapperScript)
-        {
-            var postprocessorTimer = Stopwatch.StartNew();
-            RunPostprocessor();
-            lastPostprocessor += postprocessorTimer.Elapsed;
-        }
+        timer.Restart();
+        RunProcessors("postprocessor", processor => { processor.Postprocessor(); return true; }, "__run_postprocessor");
+        lastProcessors += timer.Elapsed;
     }
 
     private void ApplyExpressions()
@@ -727,52 +694,27 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         }
     }
 
-    // Only called when hasMapperScript is true (see Refresh); no no-op guard needed here.
-    private bool RunPreprocessor()
+    // Native processor first, then the mapper script's. A preprocessor returning false stops the
+    // chain and skips the rest of the read.
+    private bool RunProcessors(string stage, Func<INativeProcessor, bool> runNative, string scriptFunction)
     {
         try
         {
-            return scriptEngine.Engine.Invoke("__run_preprocessor").AsNumber() != 0;
-        }
-        catch (JintException ex)
-        {
-            throw new InvalidDataException($"Mapper '{MapperFileName}' preprocessor failed: {ex.Message}", ex);
-        }
-    }
-
-    private bool RunNativePreprocessor()
-    {
-        try
-        {
-            return nativeProcessor!.Preprocessor();
+            if (nativeProcessor is not null && !runNative(nativeProcessor)) return false;
         }
         catch (Exception ex)
         {
-            throw new InvalidDataException($"Mapper '{MapperFileName}' native processor '{NativeProcessorId}' preprocessor failed: {ex.Message}", ex);
+            throw new InvalidDataException($"Mapper '{MapperFileName}' native processor '{NativeProcessorId}' {stage} failed: {ex.Message}", ex);
         }
-    }
 
-    private void RunPostprocessor()
-    {
+        if (!hasMapperScript) return true;
         try
         {
-            scriptEngine.Engine.Invoke("__run_postprocessor");
+            return scriptEngine.Engine.Invoke(scriptFunction).AsNumber() != 0;
         }
         catch (JintException ex)
         {
-            throw new InvalidDataException($"Mapper '{MapperFileName}' postprocessor failed: {ex.Message}", ex);
-        }
-    }
-
-    private void RunNativePostprocessor()
-    {
-        try
-        {
-            nativeProcessor!.Postprocessor();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Mapper '{MapperFileName}' native processor '{NativeProcessorId}' postprocessor failed: {ex.Message}", ex);
+            throw new InvalidDataException($"Mapper '{MapperFileName}' {stage} failed: {ex.Message}", ex);
         }
     }
 

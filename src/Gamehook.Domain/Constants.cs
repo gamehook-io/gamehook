@@ -14,8 +14,11 @@ public sealed class GameSystem(string id, MemoryRegionDefinition[] memoryRegions
 {
     public string Id { get; } = id;
     public IReadOnlyList<MemoryRegionDefinition> RegionDefinitions { get; } = Array.AsReadOnly(memoryRegions);
-    public IReadOnlyList<string> MemoryRegions { get; } = Array.AsReadOnly(memoryRegions.Select(region => region.Id).ToArray());
     public Endianness IntegerEndianness { get; } = integerEndianness;
+
+    /// Case-insensitive, so API callers can say "wram" for "WRAM".
+    public MemoryRegionDefinition? FindRegion(string id) =>
+        RegionDefinitions.FirstOrDefault(region => string.Equals(region.Id, id, StringComparison.OrdinalIgnoreCase));
 
     private static readonly MemoryRegionDefinition[] GameBoyRegions =
     [

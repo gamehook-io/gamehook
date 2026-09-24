@@ -4,7 +4,8 @@ namespace Gamehook.Domain.Interface;
 
 public interface IMapper
 {
-    // A shared driver serializes protocols whose emulator memory mapping is global.
+    // The mapper's own driver, shared with the hex viewer and raw region reads so they go through
+    // the same connection (null for mappers not backed by a device).
     IDriver? MemoryDriver => null;
 
     GameSystem System { get; }
@@ -44,8 +45,6 @@ public interface IMapper
     /// Raw byte poke (hex editor) - writes `bytes` straight to `regionId`/`startingAddress` with no
     /// property/encoding involved. Still serialized through the same write path as WriteAsync.
     Task<(bool Success, string? Error)> WriteRawBytesAsync(string regionId, ulong startingAddress, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default);
-
-    IAsyncEnumerable<bool> ReadContinuouslyAsync(TimeSpan interval, CancellationToken cancellationToken = default);
 }
 
 public sealed record PropertyInspection(string Name, string Type, object? Value, string? Error);

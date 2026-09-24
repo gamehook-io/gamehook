@@ -1,4 +1,5 @@
 using Gamehook.Domain.Interface;
+using Gamehook.Domain.Mapping;
 using Gamehook.Infrastructure;
 using Gamehook.Infrastructure.Drivers;
 
@@ -41,7 +42,7 @@ public class BaseTest
     public async Task<IMapper> CreateSaveStateMapper(string mapperFilename, string saveStateFilename)
     {
         var mapper = new Mapper(
-            GetMapperFilePath(mapperFilename),
+            MapperCompiler.Load(GetMapperFilePath(mapperFilename)),
             new SaveStateDriver(GetSaveStateFilePath(saveStateFilename)));
 
         await mapper.ReadAsync();

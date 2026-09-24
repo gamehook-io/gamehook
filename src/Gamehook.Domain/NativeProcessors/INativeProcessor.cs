@@ -42,8 +42,6 @@ public interface INativeProcessorHost
 
     IEnumerable<string> PropertyNames { get; }
 
-    object? GetPropertyValue(string path);
-
     ReadOnlyMemory<byte> GetPropertyBytes(string path);
 
     void SetPropertyValue(string path, object? value);
