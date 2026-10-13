@@ -36,6 +36,8 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
         builder.Services.AddProblemDetails();
+        builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+            policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Description = """
@@ -64,6 +66,7 @@ public sealed class GamehookApiHostedService(
         app = builder.Build();
         app.UseExceptionHandler();
         app.UseStatusCodePages();
+        app.UseCors();
         app.MapOpenApi();
         app.MapScalarApiReference("/scalar", options =>
         {
