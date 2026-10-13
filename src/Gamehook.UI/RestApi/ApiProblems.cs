@@ -14,6 +14,14 @@ internal static class ApiProblems
 
     public static IResult ServiceUnavailable(string detail, string code) => Create(StatusCodes.Status503ServiceUnavailable, "Service unavailable", detail, code);
 
+    public static IResult Forbidden(string detail, string code) => Create(StatusCodes.Status403Forbidden, "Forbidden", detail, code);
+
+    public static IResult PayloadTooLarge(string detail, string code) => Create(StatusCodes.Status413PayloadTooLarge, "Request body too large", detail, code);
+
+    public static IResult UnsupportedMediaType(string detail, string code) => Create(StatusCodes.Status415UnsupportedMediaType, "Unsupported media type", detail, code);
+
+    public static IResult ServerError(string detail, string code) => Create(StatusCodes.Status500InternalServerError, "Request failed", detail, code);
+
     public static IResult InstanceNotFound(int index) => NotFound(
         $"Instance {index} does not exist. GET /instances lists the available instances.",
         "instance_not_found");

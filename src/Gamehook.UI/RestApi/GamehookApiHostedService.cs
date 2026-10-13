@@ -33,11 +33,13 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton(instances);
         foreach (var registration in driverRegistrations) builder.Services.AddSingleton(registration);
         builder.Services.AddSingleton(filesystemProvider);
+        builder.Services.AddSingleton(new OverlayKeyValueStore(filesystemProvider, loggerFactory.CreateLogger<OverlayKeyValueStore>()));
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
         builder.Services.AddProblemDetails();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
             policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+        builder.Services.AddOverlaySettingsOrigins(OverlayOriginPolicy.FromConfiguration(configuration));
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Description = """
@@ -52,6 +54,10 @@ public sealed class GamehookApiHostedService(
                 Then connect to `ws://127.0.0.1:<port>/instances/{index}/ws` to receive updates. Each successful mapper read sends an array containing only changed properties, with each item's dotted `path`, decoded `value`, and raw `bytes`. The WebSocket sends no initial snapshot. Apply updates to the snapshot by `path`; after reconnecting, call `GET /instances/{index}/properties` again.
 
                 A mapper must be loaded before the snapshot or updates are available.
+
+                ## Overlay settings
+
+                Overlays can save their own settings. Each overlay has a GUID. `GET /kv/overlays` lists the ids that have saved settings, `GET /kv/overlays/{id}` returns that overlay's settings as a JSON object, and `POST /kv/overlays/{id}` merges a JSON object into them (each top-level key is replaced whole; a `null` value removes a key). Settings are saved in the Gamehook profile folder as `kv\overlays\{id}.json`. Bodies are limited in size, nesting depth and value count. Requests from a web page are accepted only from `https://gamehook.io`, its subdomains, and localhost origins; change the allowed origins with `OverlaySettingsOrigins` in appsettings.json. Do not store secrets here.
 
                 ## Continuous read mode
 
@@ -77,6 +83,7 @@ public sealed class GamehookApiHostedService(
         app.MapInstanceEndpoints();
         app.MapHealthEndpoint();
         app.MapSettingsEndpoints();
+        app.MapKeyValueEndpoints();
 
         // A bind failure (almost always another Gamehook instance already holding the port) must
         // not take the whole app down with it - the mapper/driver session works fine with no API,
