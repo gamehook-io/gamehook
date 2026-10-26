@@ -1,0 +1,280 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.Android.ViewModels"
+             xmlns:views="using:Gamehook.Android.Views"
+             xmlns:app="using:Gamehook.Android"
+             x:Class="Gamehook.Android.Views.InstanceView"
+             x:DataType="vm:InstanceViewModel">
+    <UserControl.Resources>
+        <!-- One property row, shared by the Explorer and Pinned lists. -->
+        <DataTemplate x:Key="PropertyRowTemplate" x:DataType="vm:PropertyRow">
+            <Grid ColumnDefinitions="*,Auto">
+                <Button Grid.Column="0" Classes="flat" Command="{Binding OpenCommand}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="44">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="muted" IsVisible="{Binding IsFolder}">
+                                <Run Text="{Binding ChildCount}" /><Run Text=" items" />
+                            </TextBlock>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="mono" Foreground="#7FB2F0"
+                                   VerticalAlignment="Center" Margin="12,0,4,0" MaxWidth="160"
+                                   TextTrimming="CharacterEllipsis" IsVisible="{Binding IsProperty}" />
+                        <TextBlock Grid.Column="2" Text="›" FontSize="22" Foreground="#9299A4"
+                                   VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="{Binding IsFolder}" />
+                    </Grid>
+                </Button>
+                <Button Grid.Column="1" Classes="icon" Content="{Binding PinGlyph}" Command="{Binding TogglePinCommand}"
+                        IsVisible="{Binding IsProperty}" Foreground="#E0A339" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Top bar -->
+        <Border Grid.Row="0" Classes="bar">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <Button Grid.Column="0" Classes="icon" Content="←" Command="{Binding BackCommand}" IsVisible="{Binding ShowBack}" />
+                <TextBlock Grid.Column="1" Text="{Binding HeaderTitle}" Classes="heading" VerticalAlignment="Center"
+                           Margin="10,0" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="2" Classes="icon" Content="{Binding Shell.InstanceLabel}" FontSize="14"
+                        Command="{Binding Shell.ToggleInstancesCommand}" IsVisible="{Binding Shell.HasMultipleInstances}" />
+                <Button Grid.Column="3" Classes="icon" Content="⋮" Command="{Binding Shell.ToggleMenuCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- Body -->
+        <Panel Grid.Row="1">
+            <!-- Load flow -->
+            <Grid IsVisible="{Binding IsLoadScreenVisible}" RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16,12">
+                <ComboBox Grid.Row="0" ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}" PlaceholderText="Driver">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DriverChoice">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBox Grid.Row="1" Text="{Binding PortText}" PlaceholderText="{Binding PortHint}" Margin="0,8,0,0"
+                         TextInputOptions.ContentType="Number" IsVisible="{Binding IsNetworkDriver}" />
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,8,0,0" IsVisible="{Binding IsSaveStateDriver}">
+                    <TextBlock Text="{Binding SaveStateName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="1" Content="Choose file" Classes="secondary" Command="{Binding PickSaveStateCommand}" />
+                </Grid>
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,16,0,8">
+                    <TextBox Text="{Binding MapperFilter}" PlaceholderText="Search mappers" />
+                    <Button Grid.Column="1" Classes="icon" Content="↻" Command="{Binding RefreshMappersCommand}" />
+                </Grid>
+                <ListBox Grid.Row="3" Classes="plain" ItemsSource="{Binding FilteredMappers}" SelectedItem="{Binding SelectedMapper}"
+                         IsVisible="{Binding HasMapperChoices}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MapperChoice">
+                            <Grid ColumnDefinitions="*,Auto" MinHeight="48" Margin="12,0">
+                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="your mapper" Classes="muted" VerticalAlignment="Center"
+                                           IsVisible="{Binding IsCustom}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Row="3" IsVisible="{Binding NoMapperChoices}" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="No mappers yet" Classes="heading" TextAlignment="Center" />
+                    <TextBlock Classes="muted" TextAlignment="Center" TextWrapping="Wrap"
+                               Text="Official mappers download on first start. Check your connection and refresh, or import your own mapper files." />
+                </StackPanel>
+                <StackPanel Grid.Row="4" Spacing="8" Margin="0,12,0,0">
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes="muted" Classes.error="{Binding StatusIsError}" />
+                    <Button Content="Load" Classes="primary" Command="{Binding LoadCommand}" />
+                    <Button Content="Import mapper files…" Classes="secondary" Command="{Binding ImportMappersCommand}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Connecting -->
+            <StackPanel IsVisible="{Binding IsConnecting}" VerticalAlignment="Center" Margin="32" Spacing="12">
+                <ProgressBar IsIndeterminate="True" />
+                <TextBlock Text="{Binding Status}" TextAlignment="Center" TextWrapping="Wrap" Classes="muted" />
+            </StackPanel>
+
+            <!-- Workspace -->
+            <Grid IsVisible="{Binding IsWorkspaceVisible}" RowDefinitions="Auto,*">
+                <StackPanel Grid.Row="0">
+                    <Border Classes="card" Margin="12,8,12,0" IsVisible="{Binding !IsContinuousReadEnabled}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="Continuous read is off. Showing the last read." Classes="warning" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="Read" Classes="secondary" Command="{Binding ReadNowCommand}" />
+                        </Grid>
+                    </Border>
+                    <Border Classes="card" Margin="12,8,12,0" IsVisible="{Binding HasFooterDetail}">
+                        <TextBlock Text="{Binding FooterDetail}" Classes="warning" TextWrapping="Wrap" FontSize="13" />
+                    </Border>
+                    <Border Classes="card" Margin="12,8,12,0"
+                            IsVisible="{Binding DataWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Text="{Binding DataWarning}" Classes="warning" TextWrapping="Wrap" FontSize="13" />
+                    </Border>
+                </StackPanel>
+
+                <Panel Grid.Row="1">
+                    <!-- Explorer -->
+                    <Grid IsVisible="{Binding IsExplorerTab}" RowDefinitions="Auto,Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,8,12,4">
+                            <TextBox Text="{Binding SearchText}" PlaceholderText="Search properties" />
+                            <Button Grid.Column="1" Classes="icon" Content="✕" Command="{Binding ClearSearchCommand}"
+                                    IsVisible="{Binding HasSearch}" />
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="{Binding FolderPath}" Classes="muted" Margin="16,4"
+                                   IsVisible="{Binding InFolder}" TextTrimming="CharacterEllipsis" />
+                        <ListBox Grid.Row="2" Classes="plain" ItemsSource="{Binding Rows}"
+                                 ItemTemplate="{StaticResource PropertyRowTemplate}" />
+                    </Grid>
+
+                    <!-- Pinned -->
+                    <Panel IsVisible="{Binding IsPinnedTab}">
+                        <ListBox Classes="plain" ItemsSource="{Binding PinnedRows}" IsVisible="{Binding HasPinned}"
+                                 ItemTemplate="{StaticResource PropertyRowTemplate}" />
+                        <StackPanel IsVisible="{Binding NoPinned}" VerticalAlignment="Center" Margin="32" Spacing="8">
+                            <TextBlock Text="Nothing pinned" Classes="heading" TextAlignment="Center" />
+                            <TextBlock Text="Tap ☆ on a property to keep it here for a quick look at its live value."
+                                       Classes="muted" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Panel>
+
+                    <!-- Memory -->
+                    <ScrollViewer IsVisible="{Binding IsMemoryTab}">
+                        <StackPanel Margin="12" Spacing="10" DataContext="{Binding Memory}" x:DataType="vm:MemoryViewModel">
+                            <ComboBox ItemsSource="{Binding Regions}" SelectedItem="{Binding SelectedRegion}" PlaceholderText="Region" />
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                <TextBlock Text="Offset 0x" VerticalAlignment="Center" Classes="muted" Margin="0,0,6,0" />
+                                <TextBox Grid.Column="1" Text="{Binding OffsetText}" Classes="mono" />
+                                <Button Grid.Column="2" Classes="icon" Content="◀" Command="{Binding PreviousPageCommand}" />
+                                <Button Grid.Column="3" Classes="icon" Content="▶" Command="{Binding NextPageCommand}" />
+                                <Button Grid.Column="4" Classes="icon" Content="↻" Command="{Binding RefreshCommand}" />
+                            </Grid>
+                            <Border Classes="card">
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                                    <TextBlock Text="{Binding Dump}" Classes="mono" FontSize="12" />
+                                </ScrollViewer>
+                            </Border>
+                            <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap"
+                                       Classes.error="{Binding MessageIsError}" />
+                            <TextBlock Text="Write bytes" Classes="muted" Margin="0,8,0,0" />
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Text="Address 0x" VerticalAlignment="Center" Classes="muted" Margin="0,0,6,0" />
+                                <TextBox Grid.Column="1" Text="{Binding WriteAddressText}" Classes="mono" />
+                            </Grid>
+                            <TextBox Text="{Binding WriteBytesText}" Classes="mono" PlaceholderText="Bytes, e.g. 3F 02 A1" />
+                            <Button Content="Write to device" Classes="secondary" Command="{Binding WriteCommand}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Overlays: the hosted overlays site in an in-app browser -->
+                    <Grid IsVisible="{Binding IsOverlaysTab}" RowDefinitions="Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,0,4,0">
+                            <TextBlock Text="overlays.gamehook.io" Classes="muted" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="icon" Content="↻" Command="{Binding ReloadOverlaysCommand}" />
+                        </Grid>
+                        <app:OverlayBrowserHost Grid.Row="1" />
+                    </Grid>
+
+                    <!-- Info -->
+                    <ScrollViewer IsVisible="{Binding IsInfoTab}">
+                        <StackPanel Margin="12" Spacing="10">
+                            <Border Classes="card">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding GameName}" Classes="heading" TextWrapping="Wrap" />
+                                    <TextBlock Classes="muted" Text="{Binding FooterText}" />
+                                    <TextBlock Classes="muted">
+                                        <Run Text="{Binding PropertyCount}" /><Run Text=" properties" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Button Content="Read now" Classes="secondary" Command="{Binding ReadNowCommand}"
+                                    IsVisible="{Binding !IsContinuousReadEnabled}" />
+                            <Button Content="Reload mapper" Classes="secondary" Command="{Binding ReloadCommand}" />
+                            <Button Content="Load a different mapper" Classes="secondary" Command="{Binding UnloadCommand}" />
+                            <Border Classes="card">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Web API (this device)" Classes="muted" />
+                                    <TextBlock Text="{Binding Shell.ApiUrl}" Classes="mono" />
+                                    <TextBlock Classes="muted" TextWrapping="Wrap"
+                                               Text="Overlays and tools on this phone connect here. This instance's routes start at /instances/{index}." />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Panel>
+            </Grid>
+
+            <!-- Property inspector, over the workspace -->
+            <ContentControl Content="{Binding Detail}" IsVisible="{Binding HasDetail}" Background="#151617">
+                <ContentControl.DataTemplates>
+                    <DataTemplate DataType="vm:PropertyDetailViewModel">
+                        <views:PropertyDetailView />
+                    </DataTemplate>
+                </ContentControl.DataTemplates>
+            </ContentControl>
+
+            <!-- Sheets: tap the scrim to dismiss -->
+            <Panel IsVisible="{Binding Shell.IsMenuOpen}">
+                <Button Background="#99000000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                        Command="{Binding Shell.CloseSheetsCommand}" />
+                <Border Classes="card" Background="#232529" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" MinWidth="240">
+                    <StackPanel Spacing="2">
+                        <Button Classes="flat" Command="{Binding ToggleContinuousReadCommand}" IsVisible="{Binding IsWorkspaceVisible}">
+                            <TextBlock Text="Toggle continuous read" />
+                        </Button>
+                        <Button Classes="flat" Command="{Binding ReloadCommand}" IsVisible="{Binding IsWorkspaceVisible}">
+                            <TextBlock Text="Reload mapper" />
+                        </Button>
+                        <Button Classes="flat" Command="{Binding Shell.AddInstanceCommand}">
+                            <TextBlock Text="New instance" />
+                        </Button>
+                        <Button Classes="flat" Command="{Binding Shell.CloseInstanceCommand}" CommandParameter="{Binding}"
+                                IsVisible="{Binding Shell.HasMultipleInstances}">
+                            <TextBlock Text="Close this instance" />
+                        </Button>
+                        <Button Classes="flat" Command="{Binding Shell.OpenDocsCommand}">
+                            <TextBlock Text="API documentation" />
+                        </Button>
+                        <Button Classes="flat" Command="{Binding Shell.StopServerCommand}">
+                            <TextBlock Text="Stop Gamehook" Foreground="#E95D5D" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Panel>
+
+            <Panel IsVisible="{Binding Shell.IsInstancesOpen}">
+                <Button Background="#99000000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                        Command="{Binding Shell.CloseSheetsCommand}" />
+                <Border Classes="card" Background="#232529" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" MinWidth="240">
+                    <ItemsControl ItemsSource="{Binding Shell.Instances}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:InstanceViewModel">
+                                <Button Classes="flat" Command="{Binding Shell.SelectInstanceCommand}" CommandParameter="{Binding}">
+                                    <TextBlock>
+                                        <Run Text="{Binding Index}" /><Run Text=" · " /><Run Text="{Binding Title}" />
+                                    </TextBlock>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Panel>
+        </Panel>
+
+        <!-- Bottom tab bar -->
+        <Border Grid.Row="2" Classes="bar" Padding="0" IsVisible="{Binding ShowTabs}">
+            <Grid ColumnDefinitions="*,*,*,*,*">
+                <Button Grid.Column="0" Content="Explorer" Classes="tab" Classes.active="{Binding IsExplorerTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Explorer" />
+                <Button Grid.Column="1" Content="Pinned" Classes="tab" Classes.active="{Binding IsPinnedTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Pinned" />
+                <Button Grid.Column="2" Content="Memory" Classes="tab" Classes.active="{Binding IsMemoryTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Memory" />
+                <Button Grid.Column="3" Content="Overlays" Classes="tab" Classes.active="{Binding IsOverlaysTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Overlays" />
+                <Button Grid.Column="4" Content="Info" Classes="tab" Classes.active="{Binding IsInfoTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Info" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

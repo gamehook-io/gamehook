@@ -1,8 +1,8 @@
 using System.Globalization;
 
-namespace Gamehook.UI;
+namespace Gamehook.Presentation;
 
-internal static class ValueFormatter
+public static class ValueFormatter
 {
     // Display text for a decoded property value; culture-invariant so numbers match the API.
     public static string Format(object? value) => value switch

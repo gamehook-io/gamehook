@@ -24,6 +24,14 @@ jobs:
       - name: Test
         env:
           GAMEHOOK_TEST_MAPPERS: ${{ github.workspace }}/.test-mappers/dist
-        run: dotnet test src/Gamehook.slnx -c Release --nologo
+        # The test project, not the solution: the solution also holds the Android app, which needs
+        # the Android workload and SDK (built by the android job below).
+        run: dotnet test src/Gamehook.Tests -c Release --nologo
       - name: Test calendar release versions
         run: python .github/scripts/test_release_version.py
+
+  # Proves the Android app still builds and signs. The APK is signed with a throwaway key.
+  android:
+    uses: ./.github/workflows/android.yml
+    with:
+      artifact_name: gamehook-android-ci

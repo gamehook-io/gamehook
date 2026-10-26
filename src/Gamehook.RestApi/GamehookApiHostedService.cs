@@ -72,6 +72,19 @@ public sealed class GamehookApiHostedService(
         app = builder.Build();
         app.UseExceptionHandler();
         app.UseStatusCodePages();
+        // Private Network Access: a page served from the public internet (the hosted overlays) that
+        // calls this loopback API makes Chromium-based browsers and WebViews send a preflight
+        // asking permission; without this header they refuse the request. Only loopback is bound
+        // (see UseUrls), and CORS already decides which origins may use the API.
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))
+            {
+                context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
+            }
+
+            await next().ConfigureAwait(false);
+        });
         app.UseCors();
         app.MapOpenApi();
         app.MapScalarApiReference("/scalar", options =>

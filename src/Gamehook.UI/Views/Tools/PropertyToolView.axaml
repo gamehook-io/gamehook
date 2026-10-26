@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pres="using:Gamehook.Presentation"
              xmlns:vm="using:Gamehook.UI.ViewModels"
              xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
              xmlns:domain="using:Gamehook.Domain.Interface"
@@ -120,7 +121,7 @@
 
         <ScrollViewer IsVisible="{Binding HasSelectedProperty}" AllowAutoHide="False">
             <StackPanel Margin="16,14" Spacing="14" DataContext="{Binding ActiveNode}"
-                        x:DataType="vm:PropertyTreeNodeViewModel">
+                        x:DataType="pres:PropertyTreeNodeViewModel">
                 <StackPanel Spacing="4">
                     <SelectableTextBlock Text="{Binding Property.Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <SelectableTextBlock Text="{Binding Property.Description}" Classes="muted" FontSize="12" TextWrapping="Wrap"

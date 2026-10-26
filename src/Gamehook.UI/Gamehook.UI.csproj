@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -28,6 +28,8 @@
     <ItemGroup>
       <ProjectReference Include="..\Gamehook.Domain\Gamehook.Domain.csproj" />
       <ProjectReference Include="..\Gamehook.Infrastructure\Gamehook.Infrastructure.csproj" />
+      <ProjectReference Include="..\Gamehook.Presentation\Gamehook.Presentation.csproj" />
+      <ProjectReference Include="..\Gamehook.RestApi\Gamehook.RestApi.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -41,9 +43,6 @@
       <PackageReference Include="Dock.Avalonia" Version="12.1.0.6" />
       <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.6" />
       <PackageReference Include="StaticViewLocator" Version="0.7.0" PrivateAssets="all" />
-      <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-      <PackageReference Include="Microsoft.OpenApi" Version="2.12.2" />
-      <PackageReference Include="Scalar.AspNetCore" Version="2.17.3" />
     </ItemGroup>
 
     <ItemGroup>

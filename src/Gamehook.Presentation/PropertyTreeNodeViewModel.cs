@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Gamehook.Domain.Interface;
 
-namespace Gamehook.UI.ViewModels;
+namespace Gamehook.Presentation;
 
 // Leaf/folder node in the property tree. Built by splitting each dotted IProperty.Name
 // (e.g. "player.team.0.level") the same way the mapper XML/JS already segments paths.

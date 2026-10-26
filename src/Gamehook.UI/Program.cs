@@ -80,6 +80,7 @@ if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("ShowConsole",
 }
 #endif
 
+Gamehook.RestApi.ApiVersion.Current = AppVersion.Current;
 builder.Services.AddGamehook(builder.Configuration);
 builder.Services.AddSingleton<MainWindowViewModel>();
 builder.Services.AddSingleton<Gamehook.RestApi.ApiBindStatus>();

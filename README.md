@@ -20,8 +20,12 @@ Project standards: [contributing](CONTRIBUTING.md), [security](SECURITY.md), and
 Install the .NET 10 SDK. Windows x64 and Linux x64 are the release targets.
 
 ```sh
-dotnet build src/Gamehook.slnx -c Release
+dotnet build src/Gamehook.UI -c Release
 ```
+
+The solution (`src/Gamehook.slnx`) also contains the Android app, which needs the .NET `android` workload, a JDK and the Android SDK. To build its APK without installing any of that, run `./scripts/build-android.sh` (needs podman); it writes a signed APK (to sideload) and AAB (the format Google Play takes) to `artifacts/android/`. On GitHub, CI builds it on every push and pull request, and Release attaches the APK to the release as `Gamehook.apk`; the AAB is kept as a build artifact (`Gamehook.aab`) for Play uploads.
+
+Release signing needs three repository secrets: `ANDROID_KEYSTORE_BASE64` (the keystore file, base64-encoded), `ANDROID_KEYSTORE_PASSWORD` (used for both the keystore and the key) and `ANDROID_KEY_ALIAS`. Without them Release still publishes the desktop builds and skips the APK with a warning. Keep the same key for every release; Android only installs an update that is signed with the same key as the installed app.
 
 Select a driver and a matching mapper in the Load screen. For the Save State driver, select a GB/GBC save-state file first. Live RetroArch reads require Network Commands to be enabled; the default endpoint is `127.0.0.1:55355`. SuperShuckie uses its Poke-A-Byte shared-memory protocol, negotiated over UDP on `127.0.0.1:55356` by default. For either network driver the Load screen shows the port prefilled with its default and remembers any change; over the API, pass it as `POST /instances/{index}/driver` with `{ "value": "RetroArch", "port": 55400 }`.
 

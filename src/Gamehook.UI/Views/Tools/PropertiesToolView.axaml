@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pres="using:Gamehook.Presentation"
              xmlns:vm="using:Gamehook.UI.ViewModels"
              xmlns:search="using:Gamehook.UI.ViewModels"
              xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
@@ -35,7 +36,7 @@
                       IsVisible="{Binding !HasSearchText}"
                       ScrollViewer.AllowAutoHide="False">
                     <TreeView.ItemTemplate>
-                    <TreeDataTemplate x:DataType="vm:PropertyTreeNodeViewModel" ItemsSource="{Binding Children}">
+                    <TreeDataTemplate x:DataType="pres:PropertyTreeNodeViewModel" ItemsSource="{Binding Children}">
                         <Grid ColumnDefinitions="*,Auto,Auto,Auto" MinHeight="18">
                             <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
                                        FontSize="11"

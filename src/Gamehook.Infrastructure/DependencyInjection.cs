@@ -25,8 +25,12 @@ public static class DependencyInjection
             Drivers.RetroArchDriver.Name,
             source => new Drivers.RetroArchDriver(source, configuration.GetValue(Drivers.RetroArchDriver.AllowMultiFrameReadsKey, true)),
             Drivers.RetroArchDriver.DefaultPort));
-        services.AddSingleton(new DriverRegistration(
-            Drivers.SuperShuckieDriver.Name, source => new Drivers.SuperShuckieDriver(source), Drivers.SuperShuckieDriver.DefaultPort));
+        // SuperShuckie hands memory over through a desktop shared-memory file, which Android has no equivalent of.
+        if (!OperatingSystem.IsAndroid())
+        {
+            services.AddSingleton(new DriverRegistration(
+                Drivers.SuperShuckieDriver.Name, source => new Drivers.SuperShuckieDriver(source), Drivers.SuperShuckieDriver.DefaultPort));
+        }
         services.AddSingleton(new DriverRegistration(Drivers.SaveStateDriver.Name, source =>
             new Drivers.SaveStateDriver(string.IsNullOrWhiteSpace(source)
                 ? throw new ArgumentException($"State file path is required for {Drivers.SaveStateDriver.Name} driver.", nameof(source))
@@ -60,9 +64,13 @@ public static class DependencyInjection
         // update" check (the actual binary download continues in the background afterward), so
         // this delays mapper resolution by one network round-trip, not by a multi-hundred-MB
         // download - the mapper check then runs right after, same as if the app were up to date.
-        services.AddSingleton<AppUpdateStatusProvider>();
-        services.AddSingleton<AppUpdateService>();
-        services.AddHostedService(provider => provider.GetRequiredService<AppUpdateService>());
+        // Not on Android: Velopack self-updates desktop installs; an Android app updates via its APK.
+        if (!OperatingSystem.IsAndroid())
+        {
+            services.AddSingleton<AppUpdateStatusProvider>();
+            services.AddSingleton<AppUpdateService>();
+            services.AddHostedService(provider => provider.GetRequiredService<AppUpdateService>());
+        }
 
         // Same Release-only rule for official mappers: Debug builds only ever use MapperDirectory
         // (see FilesystemProvider.OfficialMappersEnabled), so there is nothing to download.

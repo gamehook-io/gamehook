@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.Android.ViewModels"
+             xmlns:views="using:Gamehook.Android.Views"
+             x:Class="Gamehook.Android.Views.MainView"
+             x:DataType="vm:ShellViewModel">
+    <Grid Background="#151617">
+        <!-- Engine not running (starting, stopped, failed): nothing to show but its state. -->
+        <StackPanel IsVisible="{Binding IsServerMessageVisible}" VerticalAlignment="Center" Margin="32" Spacing="14">
+            <ProgressBar IsIndeterminate="True" Height="4"
+                         IsVisible="{Binding !CanStart}" />
+            <TextBlock Text="{Binding ServerTitle}" Classes="heading" TextAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding ServerDetail}" Classes="muted" TextAlignment="Center" TextWrapping="Wrap" />
+            <Button Content="Start Gamehook" Classes="primary" Command="{Binding StartServerCommand}"
+                    IsVisible="{Binding CanStart}" />
+        </StackPanel>
+
+        <ContentControl Content="{Binding SelectedInstance}" IsVisible="{Binding IsRunning}">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:InstanceViewModel">
+                    <views:InstanceView />
+                </DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+    </Grid>
+</UserControl>

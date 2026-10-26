@@ -1,6 +1,9 @@
 <Solution>
+  <Project Path="Gamehook.Android/Gamehook.Android.csproj" />
   <Project Path="Gamehook.Domain/Gamehook.Domain.csproj" />
   <Project Path="Gamehook.Infrastructure/Gamehook.Infrastructure.csproj" />
+  <Project Path="Gamehook.Presentation/Gamehook.Presentation.csproj" />
+  <Project Path="Gamehook.RestApi/Gamehook.RestApi.csproj" />
   <Project Path="Gamehook.Tests/Gamehook.Tests.csproj" />
   <Project Path="Gamehook.UI/Gamehook.UI.csproj" />
 </Solution>

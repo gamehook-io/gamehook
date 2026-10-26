@@ -214,8 +214,24 @@ jobs:
           path: dist/${{ matrix.rid }}/
           if-no-files-found: error
 
+  # The Android app ships beside the desktop builds. Without the signing-key secrets it is skipped
+  # with a warning, so a missing key never blocks a desktop release.
+  android:
+    needs: resolve
+    uses: ./.github/workflows/android.yml
+    with:
+      artifact_name: dist-android
+      version: ${{ needs.resolve.outputs.version }}
+      mapper_commit: ${{ needs.resolve.outputs.mapper_commit }}
+      mapper_commit_date: ${{ needs.resolve.outputs.mapper_commit_date }}
+      require_signing_key: true
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
   publish:
-    needs: [resolve, build]
+    needs: [resolve, build, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -274,5 +290,12 @@ jobs:
           # both stay on the release. No --clobber needed: the fail-fast check above guarantees this
           # is always a fresh release with no prior asset under this name.
           gh release upload "$RELEASE_TAG" dist-assets/dist-win/Gamehook.exe --repo "$APP_REPO_URL"
+
+          # Present only when the Android job had a signing key (otherwise it was skipped).
+          if [ -f dist-assets/dist-android/Gamehook.apk ]; then
+            gh release upload "$RELEASE_TAG" dist-assets/dist-android/Gamehook.apk --repo "$APP_REPO_URL"
+          else
+            echo "::warning::No Android APK in this release (signing key secrets are not configured)."
+          fi
 
           gh release edit "$RELEASE_TAG" --repo "$APP_REPO_URL" --draft=false --prerelease="$prerelease"

@@ -10,7 +10,7 @@ public static class MapperEndpoints
 {
     public static void MapMapperEndpoints(this WebApplication app)
     {
-        app.MapGet("/", () => Results.Ok(new GamehookInfoResponse(Gamehook.UI.AppVersion.Current)))
+        app.MapGet("/", () => Results.Ok(new GamehookInfoResponse(ApiVersion.Current)))
         .WithName("GetGamehookInfo")
         .WithSummary("Returns Gamehook version information.")
         .Produces<GamehookInfoResponse>(StatusCodes.Status200OK)

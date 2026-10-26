@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Gamehook.Android.ViewModels"
+             x:Class="Gamehook.Android.Views.PropertyDetailView"
+             x:DataType="vm:PropertyDetailViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="12" Spacing="10">
+            <Border Classes="card">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Value" Classes="muted" />
+                    <TextBlock Text="{Binding Value}" FontSize="26" FontWeight="SemiBold" Classes="mono" Foreground="#7FB2F0"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="Raw bytes" Classes="muted" Margin="0,6,0,0" />
+                    <TextBlock Text="{Binding RawBytes}" Classes="mono" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Button Content="{Binding PinText}" Classes="secondary" Command="{Binding TogglePinCommand}" />
+
+            <Border Classes="card" IsVisible="{Binding HasDescription}">
+                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Value editor: one control per property kind -->
+            <Border Classes="card" IsVisible="{Binding HasEditor}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Edit value" Classes="muted" />
+                    <ComboBox ItemsSource="{Binding ReferenceValues}" SelectedItem="{Binding EditText}"
+                              IsVisible="{Binding CanEditReference}" />
+                    <ToggleSwitch IsChecked="{Binding EditBoolean}" IsVisible="{Binding CanEditBoolean}"
+                                  OnContent="True" OffContent="False" />
+                    <TextBox Text="{Binding EditText}" IsVisible="{Binding CanEditNumber}" TextInputOptions.ContentType="Number" />
+                    <TextBox Text="{Binding EditText}" IsVisible="{Binding CanEditString}" />
+                    <ItemsControl ItemsSource="{Binding Bits}" IsVisible="{Binding CanEditBitArray}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BitItem">
+                                <CheckBox IsChecked="{Binding IsSet}" Content="{Binding Label}" MinHeight="44" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Content="Reset" Classes="secondary" Command="{Binding ResetCommand}" />
+                        <Button Grid.Column="1" Content="Save" Classes="primary" Command="{Binding SaveValueCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" IsVisible="{Binding CanEditBytes}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Edit raw bytes" Classes="muted" />
+                    <TextBox Text="{Binding EditBytes}" Classes="mono" />
+                    <Button Content="Save bytes" Classes="secondary" Command="{Binding SaveBytesCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" IsVisible="{Binding IsReadOnly}">
+                <TextBlock Text="{Binding ReadOnlyReason}" Classes="muted" TextWrapping="Wrap" />
+            </Border>
+
+            <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap"
+                       Classes.error="{Binding MessageIsError}" />
+
+            <Border Classes="card">
+                <ItemsControl ItemsSource="{Binding Details}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DetailField">
+                            <Grid ColumnDefinitions="110,*" Margin="0,3">
+                                <TextBlock Text="{Binding Label}" Classes="muted" VerticalAlignment="Top" />
+                                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" Classes="mono" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

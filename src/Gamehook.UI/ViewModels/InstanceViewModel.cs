@@ -1,3 +1,4 @@
+using Gamehook.Presentation;
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using Avalonia.Media;
@@ -619,7 +620,7 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
     {
         explorerSearchCancellation?.Cancel();
         var searchVersion = ++explorerSearchVersion;
-        var query = NormalizeExplorerSearch(searchText);
+        var query = PropertySearch.NormalizeQuery(searchText);
         if (query.Length == 0)
         {
             ReplaceSearchTree([]);
@@ -657,10 +658,6 @@ public sealed partial class InstanceViewModel : ViewModelBase, IDisposable
 
         ReplaceSearchTree(task.Result);
     }
-
-    private static string NormalizeExplorerSearch(string searchText) => string.Join(
-        '.',
-        searchText.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static IReadOnlyList<PropertySearchTreeNodeViewModel> BuildSearchTree(
         KeyValuePair<string, PropertyTreeNodeViewModel>[] index,

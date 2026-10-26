@@ -23,6 +23,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Gamehook.Infrastructure\Gamehook.Infrastructure.csproj" />
+        <ProjectReference Include="..\Gamehook.RestApi\Gamehook.RestApi.csproj" />
         <ProjectReference Include="..\Gamehook.UI\Gamehook.UI.csproj" />
     </ItemGroup>
 

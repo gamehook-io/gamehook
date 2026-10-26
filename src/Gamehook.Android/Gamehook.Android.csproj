@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-android</TargetFramework>
+        <SupportedOSPlatformVersion>29</SupportedOSPlatformVersion>
+        <OutputType>Exe</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+        <ApplicationId>io.gamehook.mobile</ApplicationId>
+        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <AndroidPackageFormat>apk</AndroidPackageFormat>
+        <EnableAvaloniaXamlCompilation>true</EnableAvaloniaXamlCompilation>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <!-- Kestrel, minimal APIs, Serilog configuration and the mapper scripting engine are all
+             reflection-heavy; trimming them cannot be verified without a device, so ship them whole. -->
+        <PublishTrimmed>false</PublishTrimmed>
+        <AndroidLinkMode>None</AndroidLinkMode>
+        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+        <RunAOTCompilation>false</RunAOTCompilation>
+        <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    </PropertyGroup>
+
+    <!-- Release builds pin the mapper commit the same way the desktop build pins it in appsettings.json:
+         -p:MapperCommit=<sha> -p:MapperCommitDate=<iso8601>. Read back in GamehookRuntime. -->
+    <ItemGroup Condition="'$(MapperCommit)' != ''">
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>MapperCommit</_Parameter1>
+            <_Parameter2>$(MapperCommit)</_Parameter2>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>MapperCommitDate</_Parameter1>
+            <_Parameter2>$(MapperCommitDate)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="12.1.2" />
+        <PackageReference Include="Avalonia.Android" Version="12.1.2" />
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Gamehook.Domain\Gamehook.Domain.csproj" />
+        <ProjectReference Include="..\Gamehook.Infrastructure\Gamehook.Infrastructure.csproj" />
+        <ProjectReference Include="..\Gamehook.Presentation\Gamehook.Presentation.csproj" />
+        <ProjectReference Include="..\Gamehook.RestApi\Gamehook.RestApi.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AndroidResource Include="Resources\**" />
+    </ItemGroup>
+
+    <!-- The Web API runs on Microsoft.AspNetCore.App (Kestrel, minimal APIs, WebSockets), but Microsoft
+         publishes no Android runtime pack for it. Its assemblies are plain managed IL, so take them from
+         the linux-x64 pack and reference/bundle them directly instead of through the framework reference
+         (which DisableTransitiveFrameworkReferences turns off, since it would demand a pack that does
+         not exist). -->
+    <PropertyGroup>
+        <DisableTransitiveFrameworkReferences>true</DisableTransitiveFrameworkReferences>
+        <AspNetCorePackVersion>10.0.14</AspNetCorePackVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.App.Runtime.linux-x64" Version="$(AspNetCorePackVersion)"
+                          ExcludeAssets="all" GeneratePathProperty="true" />
+    </ItemGroup>
+
+    <Target Name="ReferenceAspNetCoreAssemblies" BeforeTargets="ResolveAssemblyReferences;_ComputeResolvedCopyLocalPublishAssets">
+        <ItemGroup>
+            <_AspNetCoreDll Include="$(PkgMicrosoft_AspNetCore_App_Runtime_linux-x64)/runtimes/linux-x64/lib/net10.0/Microsoft.AspNetCore*.dll" />
+            <_AspNetCoreDll Include="$(PkgMicrosoft_AspNetCore_App_Runtime_linux-x64)/runtimes/linux-x64/lib/net10.0/Microsoft.Extensions.*.dll" />
+            <_AspNetCoreDll Include="$(PkgMicrosoft_AspNetCore_App_Runtime_linux-x64)/runtimes/linux-x64/lib/net10.0/Microsoft.Net.Http.Headers.dll" />
+            <_AspNetCoreDll Include="$(PkgMicrosoft_AspNetCore_App_Runtime_linux-x64)/runtimes/linux-x64/lib/net10.0/Microsoft.JSInterop.dll" />
+            <_AspNetCoreDll Include="$(PkgMicrosoft_AspNetCore_App_Runtime_linux-x64)/runtimes/linux-x64/lib/net10.0/System.Threading.RateLimiting.dll" />
+            <Reference Include="@(_AspNetCoreDll)" Private="true" />
+        </ItemGroup>
+    </Target>
+
+</Project>

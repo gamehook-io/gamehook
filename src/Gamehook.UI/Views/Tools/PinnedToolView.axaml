@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pres="using:Gamehook.Presentation"
              xmlns:vm="using:Gamehook.UI.ViewModels"
              xmlns:tools="using:Gamehook.UI.ViewModels.Tools"
              x:Class="Gamehook.UI.Views.Tools.PinnedToolView"
@@ -33,7 +34,7 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:PropertyTreeNodeViewModel">
+                        <DataTemplate x:DataType="pres:PropertyTreeNodeViewModel">
                             <Border Classes="pinned-row" BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="0,0,0,1" Cursor="Hand"
                                     PointerPressed="PinnedRow_PointerPressed">
