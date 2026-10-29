@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Gamehook.Tests.Tests;
 
-// The hosted overlays (https://overlays.gamehook.io) call this loopback API from a public page,
+// The hosted displays (https://displays.gamehook.io) call this loopback API from a public page,
 // including from the Android app's WebView. Chromium-based browsers then send a Private Network
 // Access preflight and refuse the request unless the API answers it.
 public sealed class PrivateNetworkAccessTests
@@ -42,7 +42,7 @@ public sealed class PrivateNetworkAccessTests
                 HttpRequestMessage Preflight(bool privateNetwork)
                 {
                     var request = new HttpRequestMessage(HttpMethod.Options, "/instances");
-                    request.Headers.Add("Origin", "https://overlays.gamehook.io");
+                    request.Headers.Add("Origin", "https://displays.gamehook.io");
                     request.Headers.Add("Access-Control-Request-Method", "GET");
                     if (privateNetwork) request.Headers.Add("Access-Control-Request-Private-Network", "true");
                     return request;

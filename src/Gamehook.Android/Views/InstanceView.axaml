@@ -166,13 +166,13 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- Overlays: the hosted overlays site in an in-app browser -->
-                    <Grid IsVisible="{Binding IsOverlaysTab}" RowDefinitions="Auto,*">
+                    <!-- Displays: the hosted displays site in an in-app browser -->
+                    <Grid IsVisible="{Binding IsDisplaysTab}" RowDefinitions="Auto,*">
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,0,4,0">
-                            <TextBlock Text="overlays.gamehook.io" Classes="muted" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Classes="icon" Content="↻" Command="{Binding ReloadOverlaysCommand}" />
+                            <TextBlock Text="displays.gamehook.io" Classes="muted" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="icon" Content="↻" Command="{Binding ReloadDisplaysCommand}" />
                         </Grid>
-                        <app:OverlayBrowserHost Grid.Row="1" />
+                        <app:DisplayBrowserHost Grid.Row="1" />
                     </Grid>
 
                     <!-- Info -->
@@ -196,7 +196,7 @@
                                     <TextBlock Text="Web API (this device)" Classes="muted" />
                                     <TextBlock Text="{Binding Shell.ApiUrl}" Classes="mono" />
                                     <TextBlock Classes="muted" TextWrapping="Wrap"
-                                               Text="Overlays and tools on this phone connect here. This instance's routes start at /instances/{index}." />
+                                               Text="Displays and tools on this phone connect here. This instance's routes start at /instances/{index}." />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -270,8 +270,8 @@
                         Command="{Binding SelectTabCommand}" CommandParameter="Pinned" />
                 <Button Grid.Column="2" Content="Memory" Classes="tab" Classes.active="{Binding IsMemoryTab}"
                         Command="{Binding SelectTabCommand}" CommandParameter="Memory" />
-                <Button Grid.Column="3" Content="Overlays" Classes="tab" Classes.active="{Binding IsOverlaysTab}"
-                        Command="{Binding SelectTabCommand}" CommandParameter="Overlays" />
+                <Button Grid.Column="3" Content="Displays" Classes="tab" Classes.active="{Binding IsDisplaysTab}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="Displays" />
                 <Button Grid.Column="4" Content="Info" Classes="tab" Classes.active="{Binding IsInfoTab}"
                         Command="{Binding SelectTabCommand}" CommandParameter="Info" />
             </Grid>

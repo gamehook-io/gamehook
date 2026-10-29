@@ -29,7 +29,7 @@ public class AndroidApp : AvaloniaAndroidApplication<App>
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
 public class MainActivity : AvaloniaMainActivity
 {
-    /// The visible activity; the overlay browser needs an Activity context for its dialogs and pickers.
+    /// The visible activity; the display browser needs an Activity context for its dialogs and pickers.
     public static MainActivity? Current { get; private set; }
 
     protected override void OnDestroy()

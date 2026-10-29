@@ -7,9 +7,9 @@ namespace Gamehook.Android;
 
 /// Foreground service that owns the in-process Gamehook runtime. Android freezes or kills
 /// background processes; a foreground service (with its notification) is what keeps the Web API
-/// reachable for overlays and emulators while the user is in another app.
+/// reachable for displays and emulators while the user is in another app.
 [Service(Exported = false, ForegroundServiceType = ForegroundService.TypeSpecialUse)]
-[Property("android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE", Value = "Local Web API server for emulator overlays")]
+[Property("android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE", Value = "Local Web API server for emulator displays")]
 public class GamehookService : Service
 {
     private const string ChannelId = "gamehook-service";

@@ -15,7 +15,7 @@ internal sealed record DriverChoice(string Name, int? DefaultPort = null);
 
 internal sealed record MapperChoice(string FullPath, string DisplayName, bool IsCustom = false);
 
-internal enum WorkspaceTab { Explorer, Pinned, Memory, Overlays, Info }
+internal enum WorkspaceTab { Explorer, Pinned, Memory, Displays, Info }
 
 /// One Gamehook instance on a phone screen: the load flow, then the workspace (property explorer,
 /// pinned list, memory viewer, info) and the property inspector. Talks to the same GamehookRouter /
@@ -449,13 +449,13 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     // ---- Workspace tabs & explorer ---------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsExplorerTab), nameof(IsPinnedTab), nameof(IsMemoryTab), nameof(IsOverlaysTab), nameof(IsInfoTab), nameof(ShowBack))]
+    [NotifyPropertyChangedFor(nameof(IsExplorerTab), nameof(IsPinnedTab), nameof(IsMemoryTab), nameof(IsDisplaysTab), nameof(IsInfoTab), nameof(ShowBack))]
     private WorkspaceTab selectedTab;
 
     public bool IsExplorerTab => SelectedTab == WorkspaceTab.Explorer;
     public bool IsPinnedTab => SelectedTab == WorkspaceTab.Pinned;
     public bool IsMemoryTab => SelectedTab == WorkspaceTab.Memory;
-    public bool IsOverlaysTab => SelectedTab == WorkspaceTab.Overlays;
+    public bool IsDisplaysTab => SelectedTab == WorkspaceTab.Displays;
     public bool IsInfoTab => SelectedTab == WorkspaceTab.Info;
 
     partial void OnSelectedTabChanged(WorkspaceTab value)
@@ -465,7 +465,7 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ReloadOverlays() => OverlayBrowser.Reload();
+    private void ReloadDisplays() => DisplayBrowser.Reload();
 
     [RelayCommand]
     private void SelectTab(string tab) => SelectedTab = Enum.Parse<WorkspaceTab>(tab);
@@ -622,7 +622,7 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
         if (!IsWorkspaceVisible) return false;
         if (HasSearch) { SearchText = string.Empty; return true; }
         if (IsExplorerTab && folders.Count > 0) { GoUp(); return true; }
-        if (IsOverlaysTab && OverlayBrowser.CanGoBack) { OverlayBrowser.GoBack(); return true; }
+        if (IsDisplaysTab && DisplayBrowser.CanGoBack) { DisplayBrowser.GoBack(); return true; }
         if (!IsExplorerTab) { SelectedTab = WorkspaceTab.Explorer; return true; }
         return false;
     }

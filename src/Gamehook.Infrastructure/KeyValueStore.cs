@@ -5,16 +5,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Gamehook.Infrastructure;
 
-/// Per-overlay key/value settings, one JSON file per overlay GUID in the profile's "kv\overlays" folder
-/// (%LOCALAPPDATA%\Gamehook\kv\overlays\{guid}.json). Overlays are web pages, and the REST API allows any
+/// Key/value settings, one JSON file per GUID in the profile's "kv" folder
+/// (%LOCALAPPDATA%\Gamehook\kv\{guid}.json). Callers are web pages, and the REST API allows any
 /// origin, so every value here is untrusted input: ids are re-formatted from a parsed Guid (never
 /// used as a path as given), only a JSON object is stored, and it must be plain data: nesting,
 /// total size, node count, key names, string lengths and numbers are all bounded, and the store
-/// holds a bounded number of overlays.
-public sealed class OverlayKeyValueStore
+/// holds a bounded number of entries.
+public sealed class KeyValueStore
 {
     public const int MaxDocumentBytes = 64 * 1024;
-    public const int MaxOverlays = 256;
+    public const int MaxEntries = 256;
     public const int MaxKeys = 256;
     public const int MaxKeyLength = 128;
     public const int MaxDepth = 16;
@@ -32,13 +32,13 @@ public sealed class OverlayKeyValueStore
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
 
     private readonly FilesystemProvider filesystem;
-    private readonly ILogger<OverlayKeyValueStore> logger;
+    private readonly ILogger<KeyValueStore> logger;
     private readonly object gate = new();
 
-    public OverlayKeyValueStore(FilesystemProvider filesystem, ILogger<OverlayKeyValueStore>? logger = null)
+    public KeyValueStore(FilesystemProvider filesystem, ILogger<KeyValueStore>? logger = null)
     {
         this.filesystem = filesystem;
-        this.logger = logger ?? NullLogger<OverlayKeyValueStore>.Instance;
+        this.logger = logger ?? NullLogger<KeyValueStore>.Instance;
     }
 
     /// The canonical lowercase hyphenated form only: no braces, no bare 32-digit form, no padding.
@@ -82,7 +82,7 @@ public sealed class OverlayKeyValueStore
         }
     }
 
-    /// The saved document, or null when this overlay has never saved anything.
+    /// The saved document, or null when this id has never saved anything.
     public JsonObject? Get(Guid id)
     {
         lock (gate) return Read(id, tolerateCorruption: false);
@@ -96,9 +96,9 @@ public sealed class OverlayKeyValueStore
         lock (gate)
         {
             var existing = Read(id, tolerateCorruption: true);
-            if (existing is null && List().Count >= MaxOverlays)
+            if (existing is null && List().Count >= MaxEntries)
             {
-                throw Failure(KeyValueError.TooManyOverlays, $"Gamehook stores settings for at most {MaxOverlays} overlays.");
+                throw Failure(KeyValueError.TooManyEntries, $"Gamehook stores settings for at most {MaxEntries} ids.");
             }
 
             var merged = existing ?? new JsonObject();
@@ -122,7 +122,7 @@ public sealed class OverlayKeyValueStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                logger.LogWarning(ex, "Could not save overlay settings for {Id}.", id);
+                logger.LogWarning(ex, "Could not save settings for {Id}.", id);
                 throw Failure(KeyValueError.StorageFailed, "The settings could not be written to disk.");
             }
 
@@ -145,9 +145,9 @@ public sealed class OverlayKeyValueStore
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException or KeyValueStoreException)
         {
-            logger.LogWarning(ex, "Overlay settings file '{Path}' is unreadable.", path);
+            logger.LogWarning(ex, "Settings file '{Path}' is unreadable.", path);
             if (tolerateCorruption) return null;
-            throw Failure(KeyValueError.Unreadable, "The saved settings for this overlay could not be read.");
+            throw Failure(KeyValueError.Unreadable, "The saved settings for this id could not be read.");
         }
     }
 
@@ -214,7 +214,7 @@ public enum KeyValueError
     InvalidKey,
     InvalidValue,
     TooLarge,
-    TooManyOverlays,
+    TooManyEntries,
     Unreadable,
     StorageFailed,
 }

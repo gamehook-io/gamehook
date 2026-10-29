@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Gamehook.Tests.Tests;
 
-public sealed class OverlayKeyValueTests
+public sealed class KeyValueTests
 {
     private const string Id = "215a7b0c-593a-4a62-9f76-e776e7992d68";
 
@@ -30,8 +30,8 @@ public sealed class OverlayKeyValueTests
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.Services.AddProblemDetails();
-        builder.Services.AddSingleton(new OverlayKeyValueStore(filesystem));
-        builder.Services.AddOverlaySettingsOrigins(new OverlayOriginPolicy(["https://gamehook.io", "https://*.gamehook.io"]));
+        builder.Services.AddSingleton(new KeyValueStore(filesystem));
+        builder.Services.AddDisplayOrigins(new DisplayOriginPolicy(["https://gamehook.io", "https://*.gamehook.io"]));
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         app = builder.Build();
         app.UseStatusCodePages();
@@ -50,7 +50,7 @@ public sealed class OverlayKeyValueTests
         profile.Delete(recursive: true);
     }
 
-    private string FileFor(string id) => Path.Combine(profile.FullName, "kv", "overlays", id + ".json");
+    private string FileFor(string id) => Path.Combine(profile.FullName, "kv", id + ".json");
 
     private static StringContent Json(string json, string mediaType = "application/json") => new(json, Encoding.UTF8, mediaType);
 
@@ -64,15 +64,15 @@ public sealed class OverlayKeyValueTests
 
     [TestCase("https://gamehook.io")]
     [TestCase("https://GAMEHOOK.io")]
-    [TestCase("https://overlays.gamehook.io")]
+    [TestCase("https://displays.gamehook.io")]
     [TestCase("https://a.b.gamehook.io")]
     [TestCase("http://localhost:5173")]
     [TestCase("http://127.0.0.1:5173")]
     [TestCase("http://[::1]:5173")]
     public async Task Allowed_origins_can_read_and_write_and_get_cors_headers(string origin)
     {
-        var write = await SendAsync(HttpMethod.Post, $"/kv/overlays/{Id}", origin, """{"a":1}""");
-        var read = await SendAsync(HttpMethod.Get, $"/kv/overlays/{Id}", origin);
+        var write = await SendAsync(HttpMethod.Post, $"/kv/{Id}", origin, """{"a":1}""");
+        var read = await SendAsync(HttpMethod.Get, $"/kv/{Id}", origin);
 
         Assert.Multiple(() =>
         {
@@ -101,12 +101,12 @@ public sealed class OverlayKeyValueTests
     [TestCase("gamehook.io")]
     public async Task Other_origins_are_refused_for_every_method_and_nothing_is_written(string origin)
     {
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"keep":true}"""));
+        await http.PostAsync($"/kv/{Id}", Json("""{"keep":true}"""));
         var before = File.ReadAllText(FileFor(Id));
 
-        var write = await SendAsync(HttpMethod.Post, $"/kv/overlays/{Id}", origin, """{"keep":false}""");
-        var read = await SendAsync(HttpMethod.Get, $"/kv/overlays/{Id}", origin);
-        var list = await SendAsync(HttpMethod.Get, "/kv/overlays", origin);
+        var write = await SendAsync(HttpMethod.Post, $"/kv/{Id}", origin, """{"keep":false}""");
+        var read = await SendAsync(HttpMethod.Get, $"/kv/{Id}", origin);
+        var list = await SendAsync(HttpMethod.Get, "/kv", origin);
 
         Assert.Multiple(() =>
         {
@@ -121,11 +121,11 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Preflight_from_a_disallowed_origin_gets_no_cors_approval()
     {
-        var evil = new HttpRequestMessage(HttpMethod.Options, $"/kv/overlays/{Id}");
+        var evil = new HttpRequestMessage(HttpMethod.Options, $"/kv/{Id}");
         evil.Headers.Add("Origin", "https://evil.example");
         evil.Headers.Add("Access-Control-Request-Method", "POST");
         evil.Headers.Add("Access-Control-Request-Headers", "content-type");
-        var good = new HttpRequestMessage(HttpMethod.Options, $"/kv/overlays/{Id}");
+        var good = new HttpRequestMessage(HttpMethod.Options, $"/kv/{Id}");
         good.Headers.Add("Origin", "https://gamehook.io");
         good.Headers.Add("Access-Control-Request-Method", "POST");
         good.Headers.Add("Access-Control-Request-Headers", "content-type");
@@ -143,15 +143,15 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Requests_without_an_origin_header_are_allowed()
     {
-        Assert.That((await SendAsync(HttpMethod.Post, $"/kv/overlays/{Id}", origin: null, """{"a":1}""")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await SendAsync(HttpMethod.Post, $"/kv/{Id}", origin: null, """{"a":1}""")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [Test]
     public void Origins_come_from_configuration_with_gamehook_io_as_the_default()
     {
-        var configured = OverlayOriginPolicy.FromConfiguration(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["OverlaySettingsOrigins:0"] = "https://example.org" }).Build());
-        var defaults = OverlayOriginPolicy.FromConfiguration(new ConfigurationBuilder().Build());
+        var configured = DisplayOriginPolicy.FromConfiguration(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DisplayOrigins:0"] = "https://example.org" }).Build());
+        var defaults = DisplayOriginPolicy.FromConfiguration(new ConfigurationBuilder().Build());
 
         Assert.Multiple(() =>
         {
@@ -164,25 +164,25 @@ public sealed class OverlayKeyValueTests
     }
 
     [Test]
-    public async Task List_is_empty_until_an_overlay_saves_and_ignores_unrelated_files()
+    public async Task List_is_empty_until_an_id_saves_and_ignores_unrelated_files()
     {
-        Assert.That(await http.GetFromJsonAsync<string[]>("/kv/overlays"), Is.Empty);
-        Assert.That(await http.GetFromJsonAsync<string[]>("/kv/overlays/"), Is.Empty);
+        Assert.That(await http.GetFromJsonAsync<string[]>("/kv"), Is.Empty);
+        Assert.That(await http.GetFromJsonAsync<string[]>("/kv/"), Is.Empty);
 
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        File.WriteAllText(Path.Combine(profile.FullName, "kv", "overlays", "notes.json"), "{}");
-        File.WriteAllText(Path.Combine(profile.FullName, "kv", "overlays", Id.ToUpperInvariant().Replace("-", "") + ".json"), "{}");
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        File.WriteAllText(Path.Combine(profile.FullName, "kv", "notes.json"), "{}");
+        File.WriteAllText(Path.Combine(profile.FullName, "kv", Id.ToUpperInvariant().Replace("-", "") + ".json"), "{}");
 
-        Assert.That(await http.GetFromJsonAsync<string[]>("/kv/overlays"), Is.EqualTo(new[] { Id }));
+        Assert.That(await http.GetFromJsonAsync<string[]>("/kv"), Is.EqualTo(new[] { Id }));
     }
 
     [Test]
     public async Task Get_returns_404_before_any_save_then_the_saved_object()
     {
-        Assert.That((await http.GetAsync($"/kv/overlays/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That((await http.GetAsync($"/kv/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
 
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"theme":"dark","count":3,"ratio":0.5,"on":true}"""));
-        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!;
+        await http.PostAsync($"/kv/{Id}", Json("""{"theme":"dark","count":3,"ratio":0.5,"on":true}"""));
+        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!;
 
         Assert.Multiple(() =>
         {
@@ -197,8 +197,8 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Post_merges_keys_and_null_removes_a_key()
     {
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"a":1,"b":2}"""));
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json("""{"b":null,"c":3}"""));
+        await http.PostAsync($"/kv/{Id}", Json("""{"a":1,"b":2}"""));
+        var response = await http.PostAsync($"/kv/{Id}", Json("""{"b":null,"c":3}"""));
         var merged = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
 
         Assert.Multiple(() =>
@@ -215,9 +215,9 @@ public sealed class OverlayKeyValueTests
     [TestCase("not-a-guid")]
     public async Task Ids_other_than_a_hyphenated_guid_are_rejected_and_nothing_is_written(string id)
     {
-        Assert.That((await http.GetAsync($"/kv/overlays/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That((await http.PostAsync($"/kv/overlays/{id}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That(Directory.Exists(Path.Combine(profile.FullName, "kv", "overlays")), Is.False);
+        Assert.That((await http.GetAsync($"/kv/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{id}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(Directory.Exists(Path.Combine(profile.FullName, "kv")), Is.False);
     }
 
     [TestCase("[1,2]")]
@@ -230,7 +230,7 @@ public sealed class OverlayKeyValueTests
     [TestCase("")]
     public async Task Bodies_that_are_not_a_clean_json_object_are_rejected(string body)
     {
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json(body));
+        var response = await http.PostAsync($"/kv/{Id}", Json(body));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(File.Exists(FileFor(Id)), Is.False);
@@ -239,8 +239,8 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Lists_and_nested_objects_round_trip()
     {
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"hidden":["hp","mp"],"layout":{"left":{"width":400,"items":[1,null,{"x":true}]}},"empty":[],"none":{}}"""));
-        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!;
+        await http.PostAsync($"/kv/{Id}", Json("""{"hidden":["hp","mp"],"layout":{"left":{"width":400,"items":[1,null,{"x":true}]}},"empty":[],"none":{}}"""));
+        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!;
 
         Assert.Multiple(() =>
         {
@@ -256,10 +256,10 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task A_posted_key_replaces_its_whole_value_instead_of_deep_merging()
     {
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"layout":{"a":1,"b":2}}"""));
-        await http.PostAsync($"/kv/overlays/{Id}", Json("""{"layout":{"c":3}}"""));
+        await http.PostAsync($"/kv/{Id}", Json("""{"layout":{"a":1,"b":2}}"""));
+        await http.PostAsync($"/kv/{Id}", Json("""{"layout":{"c":3}}"""));
 
-        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!;
+        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!;
         Assert.That(saved["layout"]!.AsObject().Select(pair => pair.Key), Is.EqualTo(new[] { "c" }));
     }
 
@@ -272,7 +272,7 @@ public sealed class OverlayKeyValueTests
     [TestCase("""{"a":{"b":1,"b":2}}""")]
     public async Task Bad_keys_numbers_and_duplicates_are_rejected_at_any_depth(string body)
     {
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json(body));
+        var response = await http.PostAsync($"/kv/{Id}", Json(body));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That(File.Exists(FileFor(Id)), Is.False);
@@ -281,11 +281,11 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Nested_strings_and_keys_over_the_limits_are_rejected()
     {
-        var longString = new string('x', OverlayKeyValueStore.MaxStringLength + 1);
-        var longKey = new string('k', OverlayKeyValueStore.MaxKeyLength + 1);
+        var longString = new string('x', KeyValueStore.MaxStringLength + 1);
+        var longKey = new string('k', KeyValueStore.MaxKeyLength + 1);
 
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":["{{longString}}"]}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json("{\"a\":{\"" + longKey + "\":1}}"))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json($$"""{"a":["{{longString}}"]}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json("{\"a\":{\"" + longKey + "\":1}}"))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]
@@ -293,18 +293,18 @@ public sealed class OverlayKeyValueTests
     {
         string Nest(int levels) => string.Concat(Enumerable.Repeat("""{"a":""", levels)) + "1" + new string('}', levels);
 
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json(Nest(OverlayKeyValueStore.MaxDepth)))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json(Nest(OverlayKeyValueStore.MaxDepth + 1)))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json(Nest(KeyValueStore.MaxDepth)))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json(Nest(KeyValueStore.MaxDepth + 1)))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         var deep = new string('[', 5000) + new string(']', 5000);
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":{{deep}}}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json($$"""{"a":{{deep}}}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]
     public async Task The_total_number_of_values_is_capped_even_within_the_byte_limit()
     {
-        var items = string.Join(',', Enumerable.Repeat("1", OverlayKeyValueStore.MaxNodes));
+        var items = string.Join(',', Enumerable.Repeat("1", KeyValueStore.MaxNodes));
 
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":[{{items}}]}"""));
+        var response = await http.PostAsync($"/kv/{Id}", Json($$"""{"a":[{{items}}]}"""));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
         Assert.That(File.Exists(FileFor(Id)), Is.False);
@@ -313,17 +313,17 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Long_strings_are_rejected_and_the_limit_itself_is_accepted()
     {
-        var ok = new string('x', OverlayKeyValueStore.MaxStringLength);
-        var tooLong = new string('x', OverlayKeyValueStore.MaxStringLength + 1);
+        var ok = new string('x', KeyValueStore.MaxStringLength);
+        var tooLong = new string('x', KeyValueStore.MaxStringLength + 1);
 
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":"{{ok}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":"{{tooLong}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json($$"""{"a":"{{ok}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json($$"""{"a":"{{tooLong}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]
     public async Task Numbers_in_any_json_form_up_to_double_range_are_accepted()
     {
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json("""{"a":-12,"b":3.5e2,"c":0,"d":1.7e308}"""));
+        var response = await http.PostAsync($"/kv/{Id}", Json("""{"a":-12,"b":3.5e2,"c":0,"d":1.7e308}"""));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -331,18 +331,18 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task A_hand_edited_file_with_invalid_content_reads_as_a_server_error_but_can_be_overwritten()
     {
-        Directory.CreateDirectory(Path.Combine(profile.FullName, "kv", "overlays"));
+        Directory.CreateDirectory(Path.Combine(profile.FullName, "kv"));
         File.WriteAllText(FileFor(Id), """{"a":{"__proto__":true}}""");
 
-        Assert.That((await http.GetAsync($"/kv/overlays/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json("""{"b":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That(JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!.AsObject().Single().Key, Is.EqualTo("b"));
+        Assert.That((await http.GetAsync($"/kv/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json("""{"b":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!.AsObject().Single().Key, Is.EqualTo("b"));
     }
 
     [Test]
     public async Task Other_content_types_are_rejected()
     {
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json("{}", "text/plain"));
+        var response = await http.PostAsync($"/kv/{Id}", Json("{}", "text/plain"));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.UnsupportedMediaType));
     }
@@ -350,17 +350,17 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Oversized_bodies_and_oversized_merged_documents_are_rejected_without_changing_the_file()
     {
-        var big = new string('x', OverlayKeyValueStore.MaxDocumentBytes);
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"a":"{{big}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
+        var big = new string('x', KeyValueStore.MaxDocumentBytes);
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json($$"""{"a":"{{big}}"}"""))).StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
 
         // Each batch is under the body limit; together the merged document is not.
-        var text = new string('x', OverlayKeyValueStore.MaxStringLength);
+        var text = new string('x', KeyValueStore.MaxStringLength);
         string Batch(string prefix) => "{" + string.Join(',', Enumerable.Range(0, 12).Select(i => $"\"{prefix}{i}\":\"{text}\"")) + "}";
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json(Batch("a")))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json(Batch("a")))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var before = File.ReadAllText(FileFor(Id));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json(Batch("b")))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json(Batch("b")))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var full = File.ReadAllText(FileFor(Id));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json(Batch("c")))).StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json(Batch("c")))).StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
 
         Assert.That(File.ReadAllText(FileFor(Id)), Is.EqualTo(full));
         Assert.That(full.Length, Is.GreaterThan(before.Length));
@@ -369,44 +369,44 @@ public sealed class OverlayKeyValueTests
     [Test]
     public async Task Too_many_keys_are_rejected()
     {
-        var keys = string.Join(',', Enumerable.Range(0, OverlayKeyValueStore.MaxKeys + 1).Select(i => $"\"k{i}\":1"));
+        var keys = string.Join(',', Enumerable.Range(0, KeyValueStore.MaxKeys + 1).Select(i => $"\"k{i}\":1"));
 
-        var response = await http.PostAsync($"/kv/overlays/{Id}", Json($"{{{keys}}}"));
+        var response = await http.PostAsync($"/kv/{Id}", Json($"{{{keys}}}"));
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
     }
 
     [Test]
-    public async Task The_number_of_overlays_is_capped()
+    public async Task The_number_of_entries_is_capped()
     {
-        for (var i = 0; i < OverlayKeyValueStore.MaxOverlays; i++)
+        for (var i = 0; i < KeyValueStore.MaxEntries; i++)
         {
-            Assert.That((await http.PostAsync($"/kv/overlays/{Guid.NewGuid():D}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That((await http.PostAsync($"/kv/{Guid.NewGuid():D}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         }
 
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
-        var existing = (await http.GetFromJsonAsync<string[]>("/kv/overlays"))![0];
-        Assert.That((await http.PostAsync($"/kv/overlays/{existing}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json("{}"))).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        var existing = (await http.GetFromJsonAsync<string[]>("/kv"))![0];
+        Assert.That((await http.PostAsync($"/kv/{existing}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [Test]
     public async Task A_corrupt_file_reads_as_a_server_error_but_can_be_overwritten()
     {
-        Directory.CreateDirectory(Path.Combine(profile.FullName, "kv", "overlays"));
+        Directory.CreateDirectory(Path.Combine(profile.FullName, "kv"));
         File.WriteAllText(FileFor(Id), "{ not json");
 
-        Assert.That((await http.GetAsync($"/kv/overlays/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
-        Assert.That((await http.PostAsync($"/kv/overlays/{Id}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That((int?)JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!["a"], Is.EqualTo(1));
+        Assert.That((await http.GetAsync($"/kv/{Id}")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+        Assert.That((await http.PostAsync($"/kv/{Id}", Json("""{"a":1}"""))).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((int?)JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!["a"], Is.EqualTo(1));
     }
 
     [Test]
     public async Task Concurrent_updates_to_different_keys_are_all_kept()
     {
-        await Task.WhenAll(Enumerable.Range(0, 20).Select(i => http.PostAsync($"/kv/overlays/{Id}", Json($$"""{"k{{i}}":{{i}}}"""))));
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(i => http.PostAsync($"/kv/{Id}", Json($$"""{"k{{i}}":{{i}}}"""))));
 
-        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/overlays/{Id}"))!.AsObject();
+        var saved = JsonNode.Parse(await http.GetStringAsync($"/kv/{Id}"))!.AsObject();
         Assert.That(saved.Count, Is.EqualTo(20));
-        Assert.That(Directory.GetFiles(Path.Combine(profile.FullName, "kv", "overlays"), "*.tmp"), Is.Empty);
+        Assert.That(Directory.GetFiles(Path.Combine(profile.FullName, "kv"), "*.tmp"), Is.Empty);
     }
 }

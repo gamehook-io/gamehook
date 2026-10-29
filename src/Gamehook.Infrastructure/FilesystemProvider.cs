@@ -20,7 +20,6 @@ public class FilesystemProvider
     private const string MapperManifestFileName = ".mapper-manifest.json";
     private const string LastOpenedFileName = "last_opened.json";
     private const string KeyValueDirectoryName = "kv";
-    private const string OverlaySettingsDirectoryName = "overlays";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -100,8 +99,8 @@ public class FilesystemProvider
     /// The managed official mapper installation MapperUpdateService downloads into.
     public string GetOfficialMapperDirectory() => Path.Combine(GamehookProfileDirectory, OfficialMapperDirectoryName);
 
-    /// Where overlays' saved key/value settings live (kv\overlays): one {guid}.json per overlay (see OverlayKeyValueStore).
-    public string GetKeyValueDirectory() => Path.Combine(GamehookProfileDirectory, KeyValueDirectoryName, OverlaySettingsDirectoryName);
+    /// Where saved key/value settings live (kv): one {guid}.json per id (see KeyValueStore).
+    public string GetKeyValueDirectory() => Path.Combine(GamehookProfileDirectory, KeyValueDirectoryName);
 
     public string GetUserMapperDirectory() => Path.Combine(GamehookProfileDirectory, UserMapperDirectoryName);
 

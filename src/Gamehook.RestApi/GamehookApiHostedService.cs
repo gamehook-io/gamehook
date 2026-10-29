@@ -33,13 +33,13 @@ public sealed class GamehookApiHostedService(
         builder.Services.AddSingleton(instances);
         foreach (var registration in driverRegistrations) builder.Services.AddSingleton(registration);
         builder.Services.AddSingleton(filesystemProvider);
-        builder.Services.AddSingleton(new OverlayKeyValueStore(filesystemProvider, loggerFactory.CreateLogger<OverlayKeyValueStore>()));
+        builder.Services.AddSingleton(new KeyValueStore(filesystemProvider, loggerFactory.CreateLogger<KeyValueStore>()));
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<WebSocketConnectionTracker>();
         builder.Services.AddProblemDetails();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
             policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
-        builder.Services.AddOverlaySettingsOrigins(OverlayOriginPolicy.FromConfiguration(configuration));
+        builder.Services.AddDisplayOrigins(DisplayOriginPolicy.FromConfiguration(configuration));
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Description = """
@@ -55,9 +55,9 @@ public sealed class GamehookApiHostedService(
 
                 A mapper must be loaded before the snapshot or updates are available.
 
-                ## Overlay settings
+                ## Settings
 
-                Overlays can save their own settings. Each overlay has a GUID. `GET /kv/overlays` lists the ids that have saved settings, `GET /kv/overlays/{id}` returns that overlay's settings as a JSON object, and `POST /kv/overlays/{id}` merges a JSON object into them (each top-level key is replaced whole; a `null` value removes a key). Settings are saved in the Gamehook profile folder as `kv\overlays\{id}.json`. Bodies are limited in size, nesting depth and value count. Requests from a web page are accepted only from `https://gamehook.io`, its subdomains, and localhost origins; change the allowed origins with `OverlaySettingsOrigins` in appsettings.json. Do not store secrets here.
+                Pages can save their own settings. Each has a GUID. `GET /kv` lists the ids that have saved settings, `GET /kv/{id}` returns that id's settings as a JSON object, and `POST /kv/{id}` merges a JSON object into them (each top-level key is replaced whole; a `null` value removes a key). Settings are saved in the Gamehook profile folder as `kv\{id}.json`. Bodies are limited in size, nesting depth and value count. Requests from a web page are accepted only from `https://gamehook.io`, its subdomains, and localhost origins; change the allowed origins with `DisplayOrigins` in appsettings.json. Do not store secrets here.
 
                 ## Continuous read mode
 
@@ -72,7 +72,7 @@ public sealed class GamehookApiHostedService(
         app = builder.Build();
         app.UseExceptionHandler();
         app.UseStatusCodePages();
-        // Private Network Access: a page served from the public internet (the hosted overlays) that
+        // Private Network Access: a page served from the public internet (the hosted displays) that
         // calls this loopback API makes Chromium-based browsers and WebViews send a preflight
         // asking permission; without this header they refuse the request. Only loopback is bound
         // (see UseUrls), and CORS already decides which origins may use the API.

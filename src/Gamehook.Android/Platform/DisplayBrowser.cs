@@ -9,14 +9,14 @@ using AndroidUri = Android.Net.Uri;
 
 namespace Gamehook.Android;
 
-/// The in-app browser for the hosted overlays (https://overlays.gamehook.io). One WebView lives
-/// for the whole process so an overlay keeps running, and keeps its state, while the user looks
+/// The in-app browser for the hosted displays (https://displays.gamehook.io). One WebView lives
+/// for the whole process so a display keeps running, and keeps its state, while the user looks
 /// at another tab.
-internal static class OverlayBrowser
+internal static class DisplayBrowser
 {
-    public const string HomeUrl = "https://overlays.gamehook.io/";
+    public const string HomeUrl = "https://displays.gamehook.io/";
 
-    // The overlays site may only navigate within gamehook.io; anything else opens in the real browser.
+    // The displays site may only navigate within gamehook.io; anything else opens in the real browser.
     private const string AllowedHostSuffix = ".gamehook.io";
 
     private static WebView? webView;
@@ -39,7 +39,7 @@ internal static class OverlayBrowser
         var view = new WebView((Context?)MainActivity.Current ?? Application.Context);
         var settings = view.Settings;
         settings.JavaScriptEnabled = true;
-        // Overlays keep their own state in localStorage.
+        // Displays keep their own state in localStorage.
         settings.DomStorageEnabled = true;
         settings.AllowFileAccess = false;
         settings.AllowContentAccess = false;
@@ -77,11 +77,11 @@ internal static class OverlayBrowser
 
 /// Hosts the shared WebView inside the Avalonia tree. Avalonia creates and destroys the native
 /// control as this host enters and leaves the visual tree; the WebView itself must outlive that.
-internal sealed class OverlayBrowserHost : NativeControlHost
+internal sealed class DisplayBrowserHost : NativeControlHost
 {
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
-        var view = OverlayBrowser.GetOrCreate();
+        var view = DisplayBrowser.GetOrCreate();
         (view.Parent as global::Android.Views.ViewGroup)?.RemoveView(view);
         return new AndroidViewControlHandle(view);
     }
