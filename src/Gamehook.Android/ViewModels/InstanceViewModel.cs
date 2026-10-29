@@ -157,7 +157,9 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     public bool HasMapperChoices => Mappers.Count > 0;
     public bool NoMapperChoices => Mappers.Count == 0;
 
-    public bool ShowTabs => IsWorkspaceVisible && !HasDetail;
+    public bool ShowTabs => IsWorkspaceVisible && !HasDetail && !IsFullscreenActive;
+    public bool ShowTopBar => !IsFullscreenActive;
+    private bool IsFullscreenActive => IsDisplaysFullscreen && IsDisplaysTab;
     public bool ShowBack => HasDetail || (IsWorkspaceVisible && IsExplorerTab && InFolder);
     public string HeaderTitle => Detail?.Name ?? Title;
 
@@ -449,7 +451,7 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     // ---- Workspace tabs & explorer ---------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsExplorerTab), nameof(IsPinnedTab), nameof(IsMemoryTab), nameof(IsDisplaysTab), nameof(IsInfoTab), nameof(ShowBack))]
+    [NotifyPropertyChangedFor(nameof(IsExplorerTab), nameof(IsPinnedTab), nameof(IsMemoryTab), nameof(IsDisplaysTab), nameof(IsInfoTab), nameof(ShowBack), nameof(ShowTabs), nameof(ShowTopBar))]
     private WorkspaceTab selectedTab;
 
     public bool IsExplorerTab => SelectedTab == WorkspaceTab.Explorer;
@@ -458,14 +460,27 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     public bool IsDisplaysTab => SelectedTab == WorkspaceTab.Displays;
     public bool IsInfoTab => SelectedTab == WorkspaceTab.Info;
 
+    /// Displays tab only: hides the app's top bar, tab bar and the browser header so the browser fills
+    /// the shell. No on-screen exit button (a native WebView would cover it anyway): Android back leaves.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowTabs), nameof(ShowTopBar))]
+    private bool isDisplaysFullscreen;
+
+    [RelayCommand]
+    private void ToggleDisplaysFullscreen() => IsDisplaysFullscreen = !IsDisplaysFullscreen;
+
     partial void OnSelectedTabChanged(WorkspaceTab value)
     {
+        if (value != WorkspaceTab.Displays) IsDisplaysFullscreen = false;
         Memory.IsActive = value == WorkspaceTab.Memory;
         if (value == WorkspaceTab.Memory) _ = Memory.RefreshAsync();
     }
 
     [RelayCommand]
     private void ReloadDisplays() => DisplayBrowser.Reload();
+
+    [RelayCommand]
+    private void DisplaysBack() => DisplayBrowser.GoBack();
 
     [RelayCommand]
     private void SelectTab(string tab) => SelectedTab = Enum.Parse<WorkspaceTab>(tab);
@@ -618,6 +633,7 @@ internal sealed partial class InstanceViewModel : ObservableObject, IDisposable
     /// Hardware/gesture back: peel one layer. Returns false when there is nothing left to peel.
     public bool GoBack()
     {
+        if (IsDisplaysFullscreen) { IsDisplaysFullscreen = false; return true; }
         if (HasDetail) { CloseDetail(); return true; }
         if (!IsWorkspaceVisible) return false;
         if (HasSearch) { SearchText = string.Empty; return true; }

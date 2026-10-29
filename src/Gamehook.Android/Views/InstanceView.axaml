@@ -32,7 +32,7 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- Top bar -->
-        <Border Grid.Row="0" Classes="bar">
+        <Border Grid.Row="0" Classes="bar" IsVisible="{Binding ShowTopBar}">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                 <Button Grid.Column="0" Classes="icon" Content="←" Command="{Binding BackCommand}" IsVisible="{Binding ShowBack}" />
                 <TextBlock Grid.Column="1" Text="{Binding HeaderTitle}" Classes="heading" VerticalAlignment="Center"
@@ -168,9 +168,11 @@
 
                     <!-- Displays: the hosted displays site in an in-app browser -->
                     <Grid IsVisible="{Binding IsDisplaysTab}" RowDefinitions="Auto,*">
-                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,0,4,0">
-                            <TextBlock Text="displays.gamehook.io" Classes="muted" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Classes="icon" Content="↻" Command="{Binding ReloadDisplaysCommand}" />
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="4,0,4,0" IsVisible="{Binding !IsDisplaysFullscreen}">
+                            <Button Classes="icon" Content="←" Command="{Binding DisplaysBackCommand}" />
+                            <TextBlock Grid.Column="1" Text="displays.gamehook.io" Classes="muted" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            <Button Grid.Column="2" Classes="icon" Content="↻" Command="{Binding ReloadDisplaysCommand}" />
+                            <Button Grid.Column="3" Classes="icon" Content="⤢" Command="{Binding ToggleDisplaysFullscreenCommand}" />
                         </Grid>
                         <app:DisplayBrowserHost Grid.Row="1" />
                     </Grid>
