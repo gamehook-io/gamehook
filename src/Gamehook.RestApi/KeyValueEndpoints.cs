@@ -25,13 +25,13 @@ public static class KeyValueEndpoints
         });
 
         kv.MapGet("", List)
-            .WithName("ListSettings")
+            .WithName("ListKeyValues")
             .WithSummary("Lists the ids that have saved settings.")
             .WithDescription("Returns an array of GUIDs, in lowercase hyphenated form, sorted.")
             .Produces<string[]>(StatusCodes.Status200OK);
 
         kv.MapGet("/{id}", Get)
-            .WithName("GetSettings")
+            .WithName("GetKeyValue")
             .WithSummary("Returns the saved settings for an id as a JSON object of key/value pairs.")
             .WithDescription("404 when the id has never saved settings. The id must be a GUID in the hyphenated form 00000000-0000-0000-0000-000000000000.")
             .Produces<Dictionary<string, object?>>(StatusCodes.Status200OK)
@@ -39,7 +39,7 @@ public static class KeyValueEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         kv.MapPost("/{id}", Update)
-            .WithName("UpdateSettings")
+            .WithName("UpdateKeyValue")
             .WithSummary("Updates the saved settings for an id and returns the full result.")
             .WithDescription($"The body must be a JSON object (Content-Type: application/json); values can be strings, numbers, booleans, null, lists and nested objects. Each top-level key replaces that key's saved value (the whole value, not a deep merge); a null value removes the key; other keys are untouched. Limits: {KeyValueStore.MaxDocumentBytes} bytes per id, {KeyValueStore.MaxKeys} keys, key names up to {KeyValueStore.MaxKeyLength} characters, strings up to {KeyValueStore.MaxStringLength} characters, JSON nested at most {KeyValueStore.MaxDepth} levels deep, at most {KeyValueStore.MaxNodes} values in total, no duplicate keys, and settings for at most {KeyValueStore.MaxEntries} ids. Saved as kv\\{{id}}.json in the Gamehook profile folder. Browser requests are accepted only from allowed origins (https://gamehook.io, https://*.gamehook.io and localhost by default, see DisplayOrigins); other origins get 403. Never store secrets here.")
             .Accepts<Dictionary<string, object?>>("application/json")

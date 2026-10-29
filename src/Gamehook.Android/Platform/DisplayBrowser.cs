@@ -44,11 +44,9 @@ internal static class DisplayBrowser
         settings.AllowFileAccess = false;
         settings.AllowContentAccess = false;
         settings.SetSupportMultipleWindows(false);
-        // The page is https; the Web API (fetch and WebSocket) is plain http/ws on loopback.
-        // Compatibility mode blocks that active mixed content, which left displays stuck on
-        // "Waiting for Gamehook". Navigation is restricted to https gamehook.io (see Client), so
-        // the only http traffic the page can make is to this device.
-        settings.MixedContentMode = MixedContentHandling.AlwaysAllow;
+        // The page is https; the Web API is plain http on loopback. Chromium treats loopback as
+        // potentially trustworthy, but WebView's own policy blocks mixed content unless relaxed.
+        settings.MixedContentMode = MixedContentHandling.CompatibilityMode;
         view.SetBackgroundColor(Color.ParseColor("#151617"));
         view.SetWebViewClient(new Client());
         view.SetWebChromeClient(new WebChromeClient());

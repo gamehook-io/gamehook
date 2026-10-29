@@ -31,7 +31,9 @@ jobs:
         run: python .github/scripts/test_release_version.py
 
   # Proves the Android app still builds and signs. The APK is signed with a throwaway key.
+  # Not on pushes: those only run the tests above.
   android:
+    if: github.event_name != 'push'
     uses: ./.github/workflows/android.yml
     with:
       artifact_name: gamehook-android-ci
