@@ -8,21 +8,21 @@ spec.loader.exec_module(module)
 
 
 class ReleaseVersionTests(unittest.TestCase):
-    def test_date_and_numeric_package_version(self):
-        self.assertEqual(module.resolve("26.09.1"), ("26.09.1", "2026.9.1"))
-        self.assertEqual(module.resolve("24.02.2"), ("24.02.2", "2024.2.2"))
-        self.assertEqual(module.resolve("69.01.10"), ("69.01.10", "2069.1.10"))
+    def test_tag_and_package_version_match(self):
+        self.assertEqual(module.resolve("2026.9.1"), ("2026.9.1", "2026.9.1"))
+        self.assertEqual(module.resolve("2024.2.2"), ("2024.2.2", "2024.2.2"))
+        self.assertEqual(module.resolve("2069.1.10"), ("2069.1.10", "2069.1.10"))
 
     def test_next_monthly_number(self):
-        self.assertEqual(module.next_version("26.09", []), "26.09.1")
-        self.assertEqual(module.next_version("26.09", ["26.09.2", "26.09.10", "26.08.99"]), "26.09.11")
+        self.assertEqual(module.next_version("2026.9", []), "2026.9.1")
+        self.assertEqual(module.next_version("2026.9", ["2026.9.2", "2026.9.10", "2026.8.99"]), "2026.9.11")
 
     def test_month_and_year_rollover_reset_number(self):
-        self.assertEqual(module.next_version("26.10", ["26.09.99"]), "26.10.1")
-        self.assertEqual(module.next_version("27.01", ["26.12.99", "26.01.9"]), "27.01.1")
+        self.assertEqual(module.next_version("2026.10", ["2026.9.99"]), "2026.10.1")
+        self.assertEqual(module.next_version("2027.1", ["2026.12.99", "2026.1.9"]), "2027.1.1")
 
     def test_invalid_dates_and_injection_are_rejected(self):
-        for value in ("26.09.06.1", "26.13.1", "26.00.1", "26.9.1", "1.0.0", "v26.09.1", "26.09\ntag=bad", "$(id)", "26.09.0", "26.09.01", "26.09.65535", "26-09-06.1"):
+        for value in ("2026.9.06.1", "2026.13.1", "2026.0.1", "2026.09.1", "1.0.0", "v2026.9.1", "2026.9\ntag=bad", "$(id)", "2026.9.0", "2026.9.01", "2026.9.65535", "2026-09-06.1", "26.13.1", "26.9.1"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 module.resolve(value)
 

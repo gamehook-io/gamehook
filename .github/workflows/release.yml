@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (yy.mm.N), or month (yy.mm) to choose next number. Blank uses current UTC month and next number."
+        description: "Release version (yyyy.m.N), or month (yyyy.m) to choose next number. Blank uses current UTC month and next number."
         required: false
       mapper_commit:
         description: "Pin Mapper:Commit to this gamehook-io/mappers commit sha. Leave blank to auto-resolve the latest commit on mapper_branch."
@@ -37,7 +37,7 @@ jobs:
     # access - not a scoping choice we get to opt out of, it requires push access just to see a
     # draft exists. Without this, release-version.py's "is this number already taken" check never
     # sees the draft a prior failed run left behind, so it keeps resolving the same number (e.g.
-    # 26.09.1) every retry instead of advancing to 26.09.2 - which then collides with that
+    # 2026.9.1) every retry instead of advancing to 2026.9.2 - which then collides with that
     # very draft on upload. This job takes no write action itself; the permission is purely to
     # make drafts visible.
     permissions:
