@@ -16,8 +16,8 @@ public sealed class MapperRawWriteTests
             await File.WriteAllTextAsync(mapperPath, """
                 <mapper id="test" name="Raw write" platform="GB">
                   <properties>
-                    <property name="counter" type="int" address="0xC000" length="2" />
-                    <property name="untouched" type="int" address="0xC010" length="1" />
+                    <property name="counter" type="uint" address="0xC000" length="2" />
+                    <property name="untouched" type="uint" address="0xC010" length="1" />
                   </properties>
                 </mapper>
                 """);

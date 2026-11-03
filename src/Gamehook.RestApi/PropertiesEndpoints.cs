@@ -183,6 +183,7 @@ public static class PropertiesEndpoints
         System.Text.Json.JsonValueKind.False => false,
         System.Text.Json.JsonValueKind.String => value.GetString(),
         System.Text.Json.JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+        System.Text.Json.JsonValueKind.Number when value.TryGetUInt64(out var unsigned) => unsigned,
         System.Text.Json.JsonValueKind.Number => value.GetDouble(),
         System.Text.Json.JsonValueKind.Array => value.EnumerateArray().Select(ToValue).ToArray(),
         System.Text.Json.JsonValueKind.Object => value.EnumerateObject().ToDictionary(p => p.Name, p => ToValue(p.Value)),

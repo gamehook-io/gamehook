@@ -43,7 +43,7 @@ public sealed class b42f3152(GamehookSession session)
             if (bytes.Length == 2)
             {
                 var rawValue = BinaryPrimitives.ReadUInt16LittleEndian(bytes);
-                mapper.SetPropertyValue(path, (int)(rawValue ^ quantityDecryptionKey));
+                mapper.SetPropertyValue(path, (ulong)(rawValue ^ quantityDecryptionKey));
             }
         }
 
@@ -51,14 +51,14 @@ public sealed class b42f3152(GamehookSession session)
         if (coinsBytes.Length == 2)
         {
             var rawCoins = BinaryPrimitives.ReadUInt16LittleEndian(coinsBytes);
-            mapper.SetPropertyValue("bag.coins", (int)(rawCoins ^ quantityDecryptionKey));
+            mapper.SetPropertyValue("bag.coins", (ulong)(rawCoins ^ quantityDecryptionKey));
         }
 
         var moneyBytes = mapper.GetPropertyBytes("bag.money").Span;
         if (moneyBytes.Length == 4)
         {
             var rawMoney = BinaryPrimitives.ReadUInt32LittleEndian(moneyBytes);
-            mapper.SetPropertyValue("bag.money", unchecked((int)(rawMoney ^ moneyDecryptionKey)));
+            mapper.SetPropertyValue("bag.money", (ulong)(rawMoney ^ moneyDecryptionKey));
         }
 
         if (dmaA != 0)

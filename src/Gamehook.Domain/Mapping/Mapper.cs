@@ -124,14 +124,9 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         InspectionTypes
             .Select(entry => CreateInspectionProperty(entry.Type, entry.Label))
             .Select(property => property.TryDecode(bytes, references, out var value, out var error)
-                ? new PropertyInspection(property.Name, property.Type, NormalizeInspectionValue(property.Type, value), null)
+                ? new PropertyInspection(property.Name, property.Type, value, null)
                 : new PropertyInspection(property.Name, property.Type, null, error))
             .ToArray();
-
-    private static object? NormalizeInspectionValue(string type, object? value) =>
-        type == "uint" && value is int signedValue
-            ? unchecked((uint)signedValue)
-            : value;
 
     private IProperty CreateInspectionProperty(string type, string label)
     {
@@ -253,7 +248,7 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
 
     public ReadOnlyMemory<byte> GetPropertyBytes(string path) => GetProperty(path).Bytes;
 
-    public void SetPropertyValue(string path, object? value) => GetProperty(path).SetValueOverride(value);
+    public void SetPropertyValue(string path, object? value) => GetProperty(path).SetScriptValue(value);
 
     // Wires script host globals, plus preprocessor/postprocessor and dynamic-address helper
     // functions Mapper.Refresh calls into. Must run before LoadScript so script-facing const
@@ -415,7 +410,7 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             var descriptor = values.GetOwnProperty(path);
             if (!descriptor.Enumerable) continue;
             var value = values.Get(path).ToObject();
-            GetProperty(path.ToString()).SetValueOverride(value is double number ? unchecked((int)number) : value);
+            GetProperty(path.ToString()).SetScriptValue(value);
         }
     }
 
@@ -685,7 +680,10 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
         {
             try
             {
-                PropertyExpressions.Apply(property, expression);
+                if (PropertyExpressions.Apply(property, expression))
+                {
+                    LogWrappedExpression(property);
+                }
             }
             catch (JintException ex)
             {
@@ -693,6 +691,13 @@ public class Mapper : IMapper, INativeProcessorHost, IDisposable
             }
         }
     }
+
+    // Logged every time the expression is re-evaluated (i.e. whenever the driver's bytes change)
+    // and its result is out of range, so a bad expression cannot go unnoticed.
+    private void LogWrappedExpression(Property property) =>
+        logger.LogWarning(
+            "Property '{Property}' after-read-value-expression result is out of range for {Type} ({Width} bit); wrapped to {Value}.",
+            property.Name, property.Type, property.BitWidth, property.Value);
 
     // Native processor first, then the mapper script's. A preprocessor returning false stops the
     // chain and skips the rest of the read.

@@ -149,6 +149,34 @@ public abstract class Property : IProperty
         refreshed = true;
     }
 
+    /// Entry point for values supplied by scripts and native processors. Numbers destined for an
+    /// int/uint property must fit that property's type and width and are stored as long/ulong,
+    /// matching what decoding produces; out-of-range values throw rather than wrap. Other values
+    /// are stored as given, with a floating-point number truncated to a whole one.
+    public void SetScriptValue(object? value)
+    {
+        if (!NumericRange.IsNumeric(value))
+        {
+            SetValueOverride(value);
+            return;
+        }
+
+        if (Type is "int" or "uint" or "binaryCodedDecimal")
+        {
+            var signed = NumericRange.IsSigned(Type);
+            var number = NumericRange.ToInteger(value, truncate: true);
+            var width = BitWidth;
+            if (!NumericRange.Fits(number, signed, width))
+            {
+                throw new InvalidDataException($"Value {number} is out of range for {Type} property '{Name}' ({width} bit).");
+            }
+            SetValueOverride(NumericRange.Box(number, signed));
+            return;
+        }
+
+        SetValueOverride(value is double or float or decimal ? (object)(long)NumericRange.ToInteger(value, truncate: true) : value);
+    }
+
     public bool TryDecode(
         ReadOnlyMemory<byte> bytes,
         IReadOnlyDictionary<string, ReferenceTable> references,
@@ -370,6 +398,26 @@ public abstract class Property : IProperty
             : mapped;
 
     protected ulong ReadRawValue(ReadOnlyMemory<byte> bytes) => ApplyBits(ReadInteger(bytes));
+
+    /// Width in bits of the integer field this property covers within `byteLength` bytes: the bits
+    /// selector's width when there is one, otherwise the whole storage.
+    protected int FieldWidth(int byteLength) =>
+        Bits is null ? Math.Min(byteLength * 8, 64) : System.Numerics.BitOperations.PopCount(bitMask);
+
+    /// Public view of <see cref="FieldWidth"/> for the property's current length.
+    public int BitWidth => FieldWidth(Length);
+
+    /// ReadRawValue read as two's complement over the field width, so the top bit of the field is
+    /// the sign.
+    protected long ReadSigned(ReadOnlyMemory<byte> bytes)
+    {
+        var raw = ReadRawValue(bytes);
+        var width = FieldWidth(bytes.Length);
+        if (width == 0) return 0;
+        if (width >= 64) return unchecked((long)raw);
+        var shift = 64 - width;
+        return unchecked((long)(raw << shift)) >> shift;
+    }
 
     protected ulong ReadInteger(ReadOnlyMemory<byte> bytes)
     {

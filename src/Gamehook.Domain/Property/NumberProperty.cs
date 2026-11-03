@@ -14,39 +14,40 @@ public sealed class NumberProperty : Property
             throw new NotSupportedException($"Unsupported numeric property type '{config.Type}'.");
     }
 
-    protected override object? DecodeStaticValue(string value) =>
-        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+    protected override object? DecodeStaticValue(string value) => Type switch
+    {
+        "int" => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var signed) ? signed : null,
+        _ => ulong.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unsigned) ? unsigned : null,
+    };
 
     protected override object? Decode(ReadOnlyMemory<byte> bytes, IReadOnlyDictionary<string, ReferenceTable> references) => Type switch
     {
-        "int" => checked((int)ReadRawValue(bytes)),
-        // decimal->int always range-checks regardless of checked/unchecked, so go through ulong first: a 4-byte
-        // uint (e.g. personality_value) can exceed int.MaxValue, and we store its bit pattern rather than throw.
-        "uint" => unchecked((int)ReadRawValue(bytes)),
-        _ => checked((int)ReadBinaryCodedDecimal(bytes.Span)),
+        "int" => ReadSigned(bytes),
+        "uint" => ReadRawValue(bytes),
+        _ => checked((ulong)ReadBinaryCodedDecimal(bytes.Span)),
     };
 
     protected override ReadOnlyMemory<byte> Encode(object? value, ReadOnlyMemory<byte> currentBytes, IReadOnlyDictionary<string, ReferenceTable> references)
     {
         var raw = Type switch
         {
-            "int" or "uint" => ToRaw(value),
+            "int" or "uint" => ToRaw(value, NumericRange.IsSigned(Type), FieldWidth(currentBytes.Length)),
             _ => ToBinaryCodedDecimalRaw(value, currentBytes.Length),
         };
         return MergeBits(currentBytes, raw);
     }
 
-    private static ulong ToRaw(object? value) => value switch
+    // Strict: a value outside the type's range for this field width is an error, never wrapped or
+    // truncated. A negative int is stored as its two's complement bit pattern.
+    private static ulong ToRaw(object? value, bool signed, int width)
     {
-        null => throw new InvalidDataException("Cannot encode a null value."),
-        ulong u => u,
-        string s => ulong.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? unchecked((ulong)parsed)
-            : long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var signed)
-                ? unchecked((ulong)signed)
-                : throw new InvalidDataException($"'{s}' is not a valid integer."),
-        _ => unchecked((ulong)Convert.ToInt64(value, CultureInfo.InvariantCulture)),
-    };
+        var number = NumericRange.ToInteger(value, truncate: false);
+        if (!NumericRange.Fits(number, signed, width))
+        {
+            throw new InvalidDataException($"Value {number} is out of range for a {width}-bit {(signed ? "signed" : "unsigned")} field.");
+        }
+        return NumericRange.ToRaw(number, width);
+    }
 
     private static ulong ToBinaryCodedDecimalRaw(object? value, int byteLength)
     {

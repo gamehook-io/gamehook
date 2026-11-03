@@ -9,7 +9,7 @@ public sealed class PropertyHandle(Property property)
     public object? value
     {
         get => property.Value;
-        set => property.SetValueOverride(value is double d ? unchecked((int)d) : value);
+        set => property.SetScriptValue(value);
     }
 
     public double? address

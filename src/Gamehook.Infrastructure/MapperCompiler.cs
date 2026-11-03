@@ -154,7 +154,7 @@ public sealed class MapperCompiler
     {
         var name = (string?)element.Attribute("name") ?? throw new InvalidDataException("Property has no name.");
         var addressAttribute = (string?)element.Attribute("address");
-        var type = (string?)element.Attribute("type") ?? "int";
+        var type = (string?)element.Attribute("type") ?? "uint";
         var memoryContainer = ResolveTemplate((string?)element.Attribute("memoryContainer"), variables);
 
         ulong? address = null;
